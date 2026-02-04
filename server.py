@@ -9,11 +9,83 @@ from tts_client import merge_wavs, play_wav_bytes, split_sentences, synthesize_w
 
 DEFAULT_SAVE_DIR = "/Users/michaelhein/Pi5Platte/AI_Radio/Thorsten"
 DEFAULT_SAVE_NAME = "latest.mp3"
+DEFAULT_MODEL_DIR = "/mnt/tts/models/thorsten"
+
+VOICE_OPTIONS = {
+    "neutral": {
+        "label": "Thorsten High",
+        "model": "de_DE-thorsten-high.onnx",
+        "config": "de_DE-thorsten-high.onnx.json",
+        "supports_emotion": False,
+    },
+    "emotional": {
+        "label": "Thorsten Emotional",
+        "model": "de_DE-thorsten_emotional-medium.onnx",
+        "config": "de_DE-thorsten_emotional-medium.onnx.json",
+        "supports_emotion": True,
+    },
+    "hessisch": {
+        "label": "Thorsten Hessisch",
+        "model": "de_DE-thorsten_hessisch-medium.onnx",
+        "config": "de_DE-thorsten_hessisch-medium.onnx.json",
+        "supports_emotion": False,
+    },
+}
+
+EMOTION_SPEAKERS = {
+    "happy": 0,
+    "angry": 1,
+    "disgusted": 2,
+    "drunk": 3,
+    "neutral": 4,
+    "sleepy": 5,
+    "surprised": 6,
+    "whisper": 7,
+}
 
 
 def _read_body(handler: BaseHTTPRequestHandler) -> bytes:
     length = int(handler.headers.get("Content-Length", "0"))
     return handler.rfile.read(length) if length > 0 else b""
+
+
+def _resolve_voice(voice_key: object) -> dict:
+    if isinstance(voice_key, str):
+        option = VOICE_OPTIONS.get(voice_key.strip().lower())
+        if option:
+            return option
+    return VOICE_OPTIONS["neutral"]
+
+
+def _resolve_emotion(emotion_value: object) -> int:
+    if isinstance(emotion_value, int):
+        if emotion_value in EMOTION_SPEAKERS.values():
+            return emotion_value
+        raise ValueError("emotion speaker id is invalid")
+    if isinstance(emotion_value, str):
+        cleaned = emotion_value.strip().lower()
+        if cleaned.isdigit():
+            num = int(cleaned)
+            if num in EMOTION_SPEAKERS.values():
+                return num
+            raise ValueError("emotion speaker id is invalid")
+        if cleaned in EMOTION_SPEAKERS:
+            return EMOTION_SPEAKERS[cleaned]
+    raise ValueError("emotion must be a known key or speaker id")
+
+
+def _remote_file_exists(pi_user: str, pi_host: str, path: str) -> bool:
+    cmd = [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=5",
+        f"{pi_user}@{pi_host}",
+        f"test -f {path!s}",
+    ]
+    proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return proc.returncode == 0
 
 
 class TTSHandler(BaseHTTPRequestHandler):
@@ -112,6 +184,18 @@ class TTSHandler(BaseHTTPRequestHandler):
             self.send_error(400, "Missing text")
             return
 
+        voice = _resolve_voice(payload.get("voice", "neutral"))
+        speaker = None
+        if voice["supports_emotion"]:
+            try:
+                speaker = _resolve_emotion(payload.get("emotion", "neutral"))
+            except ValueError as exc:
+                self.send_error(400, str(exc))
+                return
+
+        model_path = os.path.join(self.server.model_dir, voice["model"])
+        config_path = os.path.join(self.server.model_dir, voice["config"])
+
         sentences = split_sentences(text)
         if not sentences:
             self.send_error(400, "Missing text")
@@ -127,12 +211,27 @@ class TTSHandler(BaseHTTPRequestHandler):
             self.wfile.flush()
 
         try:
+            if not _remote_file_exists(self.server.pi_user, self.server.pi_host, model_path):
+                self.send_error(400, f"Model not found on Pi: {model_path}")
+                return
+            if not _remote_file_exists(self.server.pi_user, self.server.pi_host, config_path):
+                self.send_error(400, f"Config not found on Pi: {config_path}")
+                return
             total = len(sentences)
             send_line(f"START {total}")
             wavs = []
             for idx, sentence in enumerate(sentences, start=1):
                 send_line(f"PROGRESS {idx}/{total}")
-                wavs.append(synthesize_wav(sentence, self.server.pi_host, self.server.pi_user))
+                wavs.append(
+                    synthesize_wav(
+                        sentence,
+                        self.server.pi_host,
+                        self.server.pi_user,
+                        model_path,
+                        config_path,
+                        speaker,
+                    )
+                )
 
             merged = merge_wavs(wavs)
             self.server.last_text = text
@@ -166,6 +265,7 @@ class TTSServer(HTTPServer):
         self.last_text: str | None = None
         self.auto_save_dir = os.environ.get("TTS_SAVE_DIR", DEFAULT_SAVE_DIR)
         self.auto_save_name = os.environ.get("TTS_SAVE_NAME", DEFAULT_SAVE_NAME)
+        self.model_dir = os.environ.get("TTS_MODEL_DIR", DEFAULT_MODEL_DIR)
 
     def wav_to_mp3(self, wav_bytes: bytes, text: str) -> bytes:
         wav_path = None

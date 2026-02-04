@@ -4,6 +4,7 @@ Lokale Browser‑App für deutsche TTS mit **Piper** auf einem **Raspberry Pi 5*
 
 ## Features
 - Web‑UI mit Texteingabe
+- Auswahl von Thorsten High, Emotional (Emotionen) und Hessisch
 - Satz‑weise Synthese mit Fortschrittsanzeige
 - Replay der letzten Ausgabe (ohne Neu‑Synthese)
 - MP3‑Export mit Lyrics‑Tag (ID3)
@@ -17,6 +18,9 @@ Lokale Browser‑App für deutsche TTS mit **Piper** auf einem **Raspberry Pi 5*
   - `--espeak_data /opt/piper/espeak-ng-data`
   - `--model /mnt/tts/models/thorsten/de_DE-thorsten-high.onnx`
   - `--config /mnt/tts/models/thorsten/de_DE-thorsten-high.onnx.json`
+  - Zusatzmodelle im selben Ordner:
+    - `de_DE-thorsten_emotional-medium.onnx` (+ `.json`)
+    - `de_DE-thorsten_hessisch-medium.onnx` (+ `.json`)
 - `ffmpeg` auf dem Mac (für MP3 + Lyrics‑Tag)
 - Gemountetes Pi‑Laufwerk auf dem Mac: `/Users/michaelhein/Pi5Platte`
 
@@ -41,6 +45,7 @@ Anpassbar via Umgebungsvariablen:
 ```bash
 TTS_SAVE_DIR="/Users/michaelhein/Pi5Platte/AI_Radio/Thorsten" \
 TTS_SAVE_NAME="mein.mp3" \
+TTS_MODEL_DIR="/mnt/tts/models/thorsten" \
 python3 "server.py" --host 0.0.0.0 --port 8080 --pi-host pi5 --pi-user pi
 ```
 

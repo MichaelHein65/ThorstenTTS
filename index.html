@@ -87,6 +87,24 @@
         color: var(--muted);
       }
 
+      select {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(9, 10, 16, 0.9);
+        color: var(--text);
+        padding: 10px 14px;
+        font-size: 0.95rem;
+        outline: none;
+        transition: border-color 120ms ease, box-shadow 120ms ease;
+        appearance: none;
+      }
+
+      select:focus {
+        border-color: rgba(255, 122, 24, 0.7);
+        box-shadow: 0 0 0 3px rgba(255, 122, 24, 0.2);
+      }
+
       textarea {
         width: 100%;
         min-height: 200px;
@@ -159,6 +177,17 @@
         color: var(--muted);
       }
 
+      .options {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+
       footer {
         margin-top: 18px;
         color: rgba(255, 255, 255, 0.5);
@@ -197,13 +226,38 @@
           <textarea id="tts-text" placeholder="Schreibe hier deinen Text ..."></textarea>
         </div>
 
+        <div class="options">
+          <div class="field">
+            <label for="voice-select">Stimme</label>
+            <select id="voice-select">
+              <option value="neutral" selected>Thorsten High</option>
+              <option value="emotional">Thorsten Emotional</option>
+              <option value="hessisch">Thorsten Hessisch</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="emotion-select">Emotion (nur Emotional)</label>
+            <select id="emotion-select">
+              <option value="neutral" selected>Neutral</option>
+              <option value="happy">Fröhlich</option>
+              <option value="angry">Wütend</option>
+              <option value="disgusted">Angewidert</option>
+              <option value="drunk">Betrunken</option>
+              <option value="sleepy">Schläfrig</option>
+              <option value="surprised">Überrascht</option>
+              <option value="whisper">Flüsternd</option>
+            </select>
+          </div>
+        </div>
+
         <div class="controls">
           <button class="btn" id="speak-btn" type="button">Sprich jetzt</button>
           <button class="btn" id="replay-btn" type="button">Wiederholen</button>
           <button class="btn" id="download-btn" type="button">MP3 speichern</button>
           <div class="meta">
             <span class="pill">Sprache: Deutsch</span>
-            <span class="pill">Stimme: Thorsten High</span>
+            <span class="pill" id="voice-pill">Stimme: Thorsten High</span>
+            <span class="pill" id="emotion-pill">Emotion: Neutral</span>
           </div>
         </div>
         <div class="status" id="status"></div>
@@ -220,10 +274,28 @@
       const downloadBtn = document.getElementById("download-btn");
       const textArea = document.getElementById("tts-text");
       const statusEl = document.getElementById("status");
+      const voiceSelect = document.getElementById("voice-select");
+      const emotionSelect = document.getElementById("emotion-select");
+      const voicePill = document.getElementById("voice-pill");
+      const emotionPill = document.getElementById("emotion-pill");
 
       function setStatus(msg) {
         statusEl.textContent = msg;
       }
+
+      function updateVoiceUI() {
+        const voiceLabel = voiceSelect.options[voiceSelect.selectedIndex].text;
+        const emotionLabel = emotionSelect.options[emotionSelect.selectedIndex].text;
+        const isEmotional = voiceSelect.value === "emotional";
+        voicePill.textContent = `Stimme: ${voiceLabel}`;
+        emotionPill.textContent = `Emotion: ${isEmotional ? emotionLabel : "—"}`;
+        emotionSelect.disabled = !isEmotional;
+        emotionSelect.style.opacity = isEmotional ? "1" : "0.5";
+      }
+
+      voiceSelect.addEventListener("change", updateVoiceUI);
+      emotionSelect.addEventListener("change", updateVoiceUI);
+      updateVoiceUI();
 
       btn.addEventListener("click", async () => {
         const text = textArea.value.trim();
@@ -236,10 +308,14 @@
         setStatus("Sende Text an Pi5 ...");
 
         try {
+          const payload = { text, voice: voiceSelect.value };
+          if (voiceSelect.value === "emotional") {
+            payload.emotion = emotionSelect.value;
+          }
           const res = await fetch("/speak", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text })
+            body: JSON.stringify(payload)
           });
 
           if (!res.ok) {

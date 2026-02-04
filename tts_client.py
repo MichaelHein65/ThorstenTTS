@@ -7,13 +7,24 @@ import wave
 from typing import Iterable, List, Optional
 
 
-REMOTE_CMD = (
-    "/usr/local/bin/piper "
-    "--espeak_data /opt/piper/espeak-ng-data "
-    "--model /mnt/tts/models/thorsten/de_DE-thorsten-high.onnx "
-    "--config /mnt/tts/models/thorsten/de_DE-thorsten-high.onnx.json "
-    "--output_file -"
-)
+DEFAULT_MODEL_PATH = "/mnt/tts/models/thorsten/de_DE-thorsten-high.onnx"
+DEFAULT_CONFIG_PATH = "/mnt/tts/models/thorsten/de_DE-thorsten-high.onnx.json"
+
+
+def _build_remote_cmd(model_path: str, config_path: str, speaker: Optional[int]) -> str:
+    cmd = [
+        "/usr/local/bin/piper",
+        "--espeak_data",
+        "/opt/piper/espeak-ng-data",
+        "--model",
+        model_path,
+        "--config",
+        config_path,
+    ]
+    if speaker is not None:
+        cmd.extend(["--speaker", str(speaker)])
+    cmd.extend(["--output_file", "-"])
+    return " ".join(cmd)
 
 
 def _format_err(prefix: str, stderr: Optional[bytes]) -> str:
@@ -36,12 +47,31 @@ def split_sentences(text: str) -> List[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
-def synthesize_wav(text: str, pi_host: str, pi_user: str) -> bytes:
+def synthesize_wav(
+    text: str,
+    pi_host: str,
+    pi_user: str,
+    model_path: Optional[str] = None,
+    config_path: Optional[str] = None,
+    speaker: Optional[int] = None,
+) -> bytes:
     if not isinstance(text, str) or not text.strip():
         raise ValueError("text must be a non-empty string")
     text = text.strip() + "\n"
 
-    ssh_cmd = ["ssh", f"{pi_user}@{pi_host}", REMOTE_CMD]
+    model_path = model_path or DEFAULT_MODEL_PATH
+    config_path = config_path or DEFAULT_CONFIG_PATH
+    if speaker is not None:
+        try:
+            speaker = int(speaker)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("speaker must be an integer") from exc
+
+    ssh_cmd = [
+        "ssh",
+        f"{pi_user}@{pi_host}",
+        _build_remote_cmd(model_path, config_path, speaker),
+    ]
 
     try:
         ssh_proc = subprocess.Popen(
@@ -133,10 +163,20 @@ def play_wav_bytes(wav_bytes: bytes) -> None:
                 pass
 
 
-def speak(text: str, pi_host: str, pi_user: str) -> None:
+def speak(
+    text: str,
+    pi_host: str,
+    pi_user: str,
+    model_path: Optional[str] = None,
+    config_path: Optional[str] = None,
+    speaker: Optional[int] = None,
+) -> None:
     sentences = split_sentences(text)
     if not sentences:
         raise ValueError("text must be a non-empty string")
-    wavs = [synthesize_wav(sentence, pi_host, pi_user) for sentence in sentences]
+    wavs = [
+        synthesize_wav(sentence, pi_host, pi_user, model_path, config_path, speaker)
+        for sentence in sentences
+    ]
     merged = merge_wavs(wavs)
     play_wav_bytes(merged)
