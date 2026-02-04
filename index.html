@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TTS Frontpage</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #0b0c10;
+        --panel: #11131a;
+        --accent: #ff7a18;
+        --accent-2: #ff3f3a;
+        --text: #f4f4f4;
+        --muted: #b9c0d0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(1200px 600px at 10% 0%, rgba(255, 122, 24, 0.25), transparent 50%),
+          radial-gradient(800px 400px at 90% 10%, rgba(255, 63, 58, 0.2), transparent 55%),
+          linear-gradient(160deg, #0a0b10 0%, #0c111a 35%, #0c0f18 100%);
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 40px 20px;
+      }
+
+      main {
+        width: min(900px, 100%);
+        background: rgba(17, 19, 26, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 20px;
+        padding: 28px 28px 32px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(6px);
+      }
+
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+
+      h1 {
+        font-family: "Space Grotesk", "IBM Plex Sans", Arial, sans-serif;
+        font-size: clamp(1.6rem, 2.8vw, 2.4rem);
+        margin: 0;
+      }
+
+      p {
+        margin: 6px 0 0;
+        color: var(--muted);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: rgba(255, 122, 24, 0.15);
+        border: 1px solid rgba(255, 122, 24, 0.4);
+        color: #ffd9bd;
+        font-size: 0.85rem;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+
+      .grid {
+        display: grid;
+        gap: 18px;
+      }
+
+      label {
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 200px;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(9, 10, 16, 0.9);
+        color: var(--text);
+        padding: 16px;
+        font-size: 1rem;
+        line-height: 1.5;
+        resize: vertical;
+        outline: none;
+        transition: border-color 120ms ease, box-shadow 120ms ease;
+      }
+
+      textarea:focus {
+        border-color: rgba(255, 122, 24, 0.7);
+        box-shadow: 0 0 0 3px rgba(255, 122, 24, 0.2);
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .btn {
+        appearance: none;
+        border: none;
+        border-radius: 999px;
+        padding: 12px 22px;
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: #0b0c10;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease;
+      }
+
+      .btn:active {
+        transform: translateY(1px);
+        box-shadow: 0 6px 16px rgba(255, 122, 24, 0.3);
+      }
+
+      .btn[disabled] {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .meta {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      .pill {
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .status {
+        min-height: 20px;
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+
+      footer {
+        margin-top: 18px;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 0.75rem;
+      }
+
+      @media (max-width: 600px) {
+        main {
+          padding: 22px 18px 26px;
+        }
+
+        .controls {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .btn {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Thorsten TTS</h1>
+          <p>Text eingeben, Sprach-Ausgabe starten, fertig.</p>
+        </div>
+        <div class="badge">Piper · Pi5</div>
+      </header>
+
+      <div class="grid">
+        <div>
+          <label for="tts-text">Text</label>
+          <textarea id="tts-text" placeholder="Schreibe hier deinen Text ..."></textarea>
+        </div>
+
+        <div class="controls">
+          <button class="btn" id="speak-btn" type="button">Sprich jetzt</button>
+          <button class="btn" id="replay-btn" type="button">Wiederholen</button>
+          <button class="btn" id="download-btn" type="button">MP3 speichern</button>
+          <div class="meta">
+            <span class="pill">Sprache: Deutsch</span>
+            <span class="pill">Stimme: Thorsten High</span>
+          </div>
+        </div>
+        <div class="status" id="status"></div>
+      </div>
+
+      <footer>
+        Diese Seite ruft lokal deinen TTS-Bridge-Server auf.
+      </footer>
+    </main>
+
+    <script>
+      const btn = document.getElementById("speak-btn");
+      const replayBtn = document.getElementById("replay-btn");
+      const downloadBtn = document.getElementById("download-btn");
+      const textArea = document.getElementById("tts-text");
+      const statusEl = document.getElementById("status");
+
+      function setStatus(msg) {
+        statusEl.textContent = msg;
+      }
+
+      btn.addEventListener("click", async () => {
+        const text = textArea.value.trim();
+        if (!text) {
+          setStatus("Bitte Text eingeben.");
+          return;
+        }
+
+        btn.disabled = true;
+        setStatus("Sende Text an Pi5 ...");
+
+        try {
+          const res = await fetch("/speak", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text })
+          });
+
+          if (!res.ok) {
+            const msg = await res.text().catch(() => "");
+            throw new Error(msg || `Fehler (${res.status})`);
+          }
+
+          const reader = res.body?.getReader();
+          if (!reader) {
+            setStatus("Keine Antwortdaten erhalten.");
+            return;
+          }
+
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed) continue;
+              if (trimmed.startsWith("START")) {
+                const total = trimmed.split(" ")[1] || "";
+                setStatus(`Starte Synthese (${total} Sätze) ...`);
+              } else if (trimmed.startsWith("PROGRESS")) {
+                const progress = trimmed.split(" ")[1] || "";
+                setStatus(`Synthese: ${progress}`);
+              } else if (trimmed.startsWith("SAVED")) {
+                setStatus(`Gespeichert: ${trimmed.slice(6)}`);
+              } else if (trimmed.startsWith("DONE")) {
+                setStatus("Fertig abgespielt.");
+              } else if (trimmed.startsWith("ERROR")) {
+                setStatus(`Fehler: ${trimmed.slice(6)}`);
+              } else if (trimmed.startsWith("WARNING")) {
+                setStatus(trimmed);
+              }
+            }
+          }
+        } catch (err) {
+          setStatus(`Fehler: ${err.message || err}`);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      replayBtn.addEventListener("click", async () => {
+        replayBtn.disabled = true;
+        setStatus("Wiederhole letzte Ausgabe ...");
+        try {
+          const res = await fetch("/replay", { method: "POST" });
+          if (!res.ok) {
+            const msg = await res.text().catch(() => "");
+            throw new Error(msg || `Fehler (${res.status})`);
+          }
+          setStatus("Wiederholung gestartet.");
+        } catch (err) {
+          setStatus(`Fehler: ${err.message || err}`);
+        } finally {
+          replayBtn.disabled = false;
+        }
+      });
+
+      downloadBtn.addEventListener("click", async () => {
+        const name = prompt("Dateiname für MP3:", "tts.mp3");
+        if (!name) return;
+        downloadBtn.disabled = true;
+        setStatus("Speichere MP3 auf Pi5Platte ...");
+        try {
+          const res = await fetch("/download", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ filename: name })
+          });
+          if (!res.ok) {
+            const msg = await res.text().catch(() => "");
+            throw new Error(msg || `Fehler (${res.status})`);
+          }
+          const data = await res.json().catch(() => ({}));
+          if (!data.ok) throw new Error(data.error || "Unbekannter Fehler");
+          setStatus(`Gespeichert: ${data.path || "OK"}`);
+        } catch (err) {
+          setStatus(`Fehler: ${err.message || err}`);
+        } finally {
+          downloadBtn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
