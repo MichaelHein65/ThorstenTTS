@@ -52,6 +52,27 @@ python3 "server.py" --host 0.0.0.0 --port 8080 --pi-host pi5 --pi-user pi
 ## MP3‑Export per Button
 Der Button **„MP3 speichern“** fragt nach einem Dateinamen und speichert direkt in den oben genannten Zielordner (kein Safari‑Download‑Ordner). Der Text wird im MP3 als **Lyrics** gespeichert.
 
+## Modelle herunterladen (Pi)
+Die Thorsten‑Voice Piper‑Seite verlinkt Model + Konfiguration für Neutral, Emotional und Hessisch. Die App erwartet die Dateinamen wie unten.
+
+Direkt auf dem Pi laden:
+```bash
+ssh pi@pi5 "mkdir -p /mnt/tts/models/thorsten && cd /mnt/tts/models/thorsten \
+  && curl -L -o de_DE-thorsten_emotional-medium.onnx \
+     'https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/de/de_DE/thorsten_emotional/medium/de_DE-thorsten_emotional-medium.onnx' \
+  && curl -L -o de_DE-thorsten_emotional-medium.onnx.json \
+     'https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/de/de_DE/thorsten_emotional/medium/de_DE-thorsten_emotional-medium.onnx.json' \
+  && curl -L -o de_DE-thorsten_hessisch-medium.onnx \
+     'https://huggingface.co/Thorsten-Voice/Hessisch/resolve/main/Thorsten-Voice_Hessisch_Piper_high-Oct2023.onnx' \
+  && curl -L -o de_DE-thorsten_hessisch-medium.onnx.json \
+     'https://huggingface.co/Thorsten-Voice/Hessisch/resolve/main/Thorsten-Voice_Hessisch_Piper_high-Oct2023.onnx.json'"
+```
+
+Check:
+```bash
+ssh pi@pi5 "ls -la /mnt/tts/models/thorsten"
+```
+
 ## Dateien
 - `server.py` – lokaler HTTP‑Server + Fortschritt + MP3‑Export
 - `tts_client.py` – SSH/Piper‑Client, Satz‑Split, WAV‑Merge
