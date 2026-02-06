@@ -73,11 +73,31 @@ Check:
 ssh pi@pi5 "ls -la /mnt/tts/models/thorsten"
 ```
 
+## Nachrichten‑Automatik (OpenAI → Thorsten → MP3)
+Die Automatik erzeugt per OpenAI‑API einen kurzen Nachrichtentext und baut daraus eine MP3, gespeichert als `Nachrichten/Aktuell.mp3`.
+
+1) `.env` anlegen (siehe `.env.example`):
+```bash
+cp .env.example .env
+```
+
+2) Script ausführen:
+```bash
+python3 news_to_mp3.py --pi-host pi5 --pi-user pi
+```
+
+Optional:
+```bash
+python3 news_to_mp3.py --pi-host pi5 --pi-user pi --voice emotional --emotion happy
+python3 news_to_mp3.py --pi-host pi5 --pi-user pi --output Nachrichten/Aktuell.mp3
+```
+
 ## Dateien
 - `server.py` – lokaler HTTP‑Server + Fortschritt + MP3‑Export
 - `tts_client.py` – SSH/Piper‑Client, Satz‑Split, WAV‑Merge
 - `index.html` – Frontend
 - `run.command` – Start per Doppelklick
+- `news_to_mp3.py` – OpenAI‑News → Thorsten → MP3
 
 ## Hinweis zu Finder‑Rechten
 Wenn Finder nicht in `/Users/michaelhein/Pi5Platte/AI_Radio/Thorsten` schreiben kann, fehlen Rechte auf dem Pi‑Mount. Auf dem Pi:
