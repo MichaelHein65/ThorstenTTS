@@ -1,6 +1,8 @@
 import argparse
 import json
 import os
+import shlex
+import socket
 import subprocess
 import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -74,7 +76,21 @@ def _resolve_emotion(emotion_value: object) -> int:
     raise ValueError("emotion must be a known key or speaker id")
 
 
+def _is_local_host(host: str) -> bool:
+    cleaned = (host or "").strip().lower()
+    if cleaned in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    local_names = {socket.gethostname().lower(), socket.getfqdn().lower()}
+    try:
+        local_names.add(os.uname().nodename.lower())
+    except AttributeError:
+        pass
+    return cleaned in local_names
+
+
 def _remote_file_exists(pi_user: str, pi_host: str, path: str) -> bool:
+    if _is_local_host(pi_host):
+        return os.path.isfile(path)
     cmd = [
         "ssh",
         "-o",
@@ -82,7 +98,7 @@ def _remote_file_exists(pi_user: str, pi_host: str, path: str) -> bool:
         "-o",
         "ConnectTimeout=5",
         f"{pi_user}@{pi_host}",
-        f"test -f {path!s}",
+        f"test -f {shlex.quote(path)}",
     ]
     proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return proc.returncode == 0
@@ -245,7 +261,10 @@ class TTSHandler(BaseHTTPRequestHandler):
                 send_line(f"SAVED {out_path}")
             except Exception as exc:
                 send_line(f"WARNING could not save mp3: {exc}")
-            play_wav_bytes(merged)
+            try:
+                play_wav_bytes(merged)
+            except Exception as exc:
+                send_line(f"WARNING could not play audio: {exc}")
             send_line("DONE")
         except Exception as exc:
             send_line(f"ERROR {exc}")
