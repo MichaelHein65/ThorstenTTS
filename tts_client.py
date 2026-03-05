@@ -16,7 +16,7 @@ DEFAULT_CONFIG_PATH = "/mnt/tts/models/thorsten/de_DE-thorsten-high.onnx.json"
 
 
 def _build_piper_cmd(model_path: str, config_path: str, speaker: Optional[int]) -> List[str]:
-    sentence_silence = os.environ.get("TTS_SENTENCE_SILENCE", "0.35").strip()
+    sentence_silence = os.environ.get("TTS_SENTENCE_SILENCE", "0.50").strip()
     cmd = [
         "/usr/local/bin/piper",
         "--espeak_data",
@@ -120,6 +120,10 @@ def split_sentences(text: str) -> List[str]:
             line = line[2:].strip()
             if not line:
                 continue
+            # Ganze Nachricht als Block sprechen, damit zwischen Meldungen
+            # ein deutlicherer Segmentwechsel entsteht.
+            out.append(line)
+            continue
 
         # Ueberschriften als eigene Sprecheinheit behandeln.
         if re.fullmatch(r"[A-ZÄÖÜ0-9][A-ZÄÖÜ0-9\s\-]*", line):
@@ -175,6 +179,12 @@ def merge_wavs(wav_chunks: Iterable[bytes]) -> bytes:
     if not chunks:
         raise ValueError("no wav data to merge")
 
+    pause_raw = os.environ.get("TTS_CHUNK_PAUSE_SEC", "0.65").strip()
+    try:
+        pause_seconds = max(0.0, float(pause_raw))
+    except ValueError:
+        pause_seconds = 0.65
+
     out_buffer = io.BytesIO()
     params = None
     with wave.open(out_buffer, "wb") as out_wav:
@@ -188,6 +198,11 @@ def merge_wavs(wav_chunks: Iterable[bytes]) -> bytes:
                     # This avoids hard failures if Piper outputs slightly different headers.
                     pass
                 out_wav.writeframes(in_wav.readframes(in_wav.getnframes()))
+                if idx < len(chunks) - 1 and params is not None and pause_seconds > 0.0:
+                    pause_frames = int(params.framerate * pause_seconds)
+                    if pause_frames > 0:
+                        silence = b"\x00" * (pause_frames * params.nchannels * params.sampwidth)
+                        out_wav.writeframes(silence)
     return out_buffer.getvalue()
 
 

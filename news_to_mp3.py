@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta
+from email.utils import parsedate_to_datetime
 from typing import Callable, Dict, List, Optional
 from urllib.request import Request, urlopen
 
@@ -72,6 +73,66 @@ _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
 
 FeedItem = Dict[str, str]
+
+SECTION_ORDER = ["TOP-THEMA", "DEUTSCHLAND", "EUROPA", "WELT", "SPORT", "KURIOSES", "WETTER"]
+SECTION_TARGET_COUNTS = {
+    "TOP-THEMA": 2,
+    "DEUTSCHLAND": 3,
+    "EUROPA": 3,
+    "WELT": 3,
+    "SPORT": 2,
+    "KURIOSES": 1,
+    "WETTER": 1,
+}
+
+NOISE_KEYWORDS = (
+    "podcast",
+    "wintersport-podcast",
+    "folge",
+    "episode",
+    "livestream",
+    "liveblog",
+    "ticker",
+    "newsletter",
+    "schreibt uns",
+    "feedback",
+    "mail an",
+    "@",
+    "video",
+    "audio",
+    "mediathek",
+)
+
+CURIOUS_NEGATIVE_KEYWORDS = (
+    "krieg",
+    "angriff",
+    "bomb",
+    "regierung",
+    "kanzler",
+    "wahl",
+    "konflikt",
+    "toete",
+    "verletz",
+    "nahost",
+    "iran",
+    "israel",
+    "ukraine",
+    "russland",
+)
+
+CURIOUS_POSITIVE_KEYWORDS = (
+    "kurios",
+    "skurril",
+    "ungewoehnlich",
+    "ungewoehnliche",
+    "rekord",
+    "tier",
+    "verblueffend",
+    "entdeckt",
+    "sensation",
+    "witz",
+    "humor",
+)
 
 
 def load_dotenv(path: str) -> None:
@@ -196,7 +257,7 @@ def _build_intro_text(now: Optional[datetime] = None) -> str:
     day_word = _day_ordinal_word(target.day)
     return (
         "Und hier die AI-Radio Nachrichten zur vollen Stunde. "
-        f"Es ist {weekday}, der {day_word} {month} {target.year} um {target.hour} Uhr."
+        f"Es ist {weekday}, der {day_word} {month} {target.year}."
     )
 
 
@@ -207,31 +268,74 @@ def _build_outro_text() -> str:
     )
 
 
-def fetch_news_text(api_key: str, model: str, prompt: str) -> str:
+def _openai_chat_completion(
+    api_key: str,
+    model: str,
+    messages: List[Dict[str, str]],
+    temperature: float = 0.3,
+    response_format: Optional[Dict[str, str]] = None,
+) -> str:
     payload = {
         "model": model,
-        "messages": [
-            {"role": "developer", "content": "Du bist ein praeziser deutscher Nachrichtenredakteur."},
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.4,
+        "messages": messages,
+        "temperature": temperature,
     }
+    if response_format is not None:
+        payload["response_format"] = response_format
+    payload_json = json.dumps(payload)
     req = Request(
         "https://api.openai.com/v1/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
+        data=payload_json.encode("utf-8"),
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
         },
         method="POST",
     )
-    with urlopen(req, timeout=60) as resp:
-        raw = resp.read()
+    try:
+        with urlopen(req, timeout=60) as resp:
+            raw = resp.read()
+    except Exception as exc:
+        curl_bin = shutil.which("curl")
+        if curl_bin is None:
+            raise
+        proc = subprocess.run(
+            [
+                curl_bin,
+                "-fsSL",
+                "https://api.openai.com/v1/chat/completions",
+                "-H",
+                "Content-Type: application/json",
+                "-H",
+                f"Authorization: Bearer {api_key}",
+                "-d",
+                payload_json,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if proc.returncode != 0:
+            err = proc.stderr.strip() or "unknown curl error"
+            raise RuntimeError(f"OpenAI request failed ({err})") from exc
+        raw = proc.stdout.encode("utf-8")
     data = json.loads(raw.decode("utf-8"))
     content = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
     if not content:
         raise RuntimeError("OpenAI response did not include content")
     return content
+
+
+def fetch_news_text(api_key: str, model: str, prompt: str) -> str:
+    return _openai_chat_completion(
+        api_key=api_key,
+        model=model,
+        messages=[
+            {"role": "developer", "content": "Du bist ein praeziser deutscher Nachrichtenredakteur."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.4,
+    )
 
 
 def _http_get_text(url: str, timeout: int = 20) -> str:
@@ -278,6 +382,242 @@ def _shorten(text: str, max_chars: int) -> str:
 def _strip_byline(text: str) -> str:
     return re.sub(r"\s+Von\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.\- ]+$", "", text).strip()
 
+
+def _parse_pub_date(item: FeedItem) -> Optional[datetime]:
+    raw = item.get("pubDate", "").strip()
+    if not raw:
+        return None
+    try:
+        dt = parsedate_to_datetime(raw)
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=datetime.now().astimezone().tzinfo)
+    return dt.astimezone()
+
+
+def _is_recent_item(item: FeedItem, max_age_hours: int) -> bool:
+    dt = _parse_pub_date(item)
+    if dt is None:
+        return True
+    age = datetime.now().astimezone() - dt
+    return age <= timedelta(hours=max_age_hours)
+
+
+def _is_noise_item(item: FeedItem) -> bool:
+    title = _clean_text(item.get("title", "")).lower()
+    desc = _clean_text(item.get("description", "")).lower()
+    link = item.get("link", "").lower()
+    haystack = f"{title} {desc} {link}"
+    if any(term in haystack for term in NOISE_KEYWORDS):
+        return True
+    return False
+
+
+def _filter_items(items: List[FeedItem], max_desc_chars: int = 380) -> List[FeedItem]:
+    filtered: List[FeedItem] = []
+    for item in items:
+        if _is_noise_item(item):
+            continue
+        desc = _clean_text(item.get("description", ""))
+        if len(desc) > max_desc_chars:
+            continue
+        filtered.append(item)
+    return filtered
+
+
+def _extract_json_object(raw: str) -> dict:
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if len(lines) >= 3:
+            text = "\n".join(lines[1:-1]).strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            raise
+        return json.loads(text[start : end + 1])
+
+
+def _compose_body_from_sections(section_lines: Dict[str, List[str]]) -> str:
+    def split_sentence_parts(text: str) -> List[str]:
+        return [part.strip() for part in re.split(r"(?<=[.!?])\s+", text.strip()) if part.strip()]
+
+    def ensure_min_sentences(section: str, bullet_text: str, minimum: int = 3) -> str:
+        text = _clean_text(bullet_text)
+        if text and text[-1] not in ".!?":
+            text = text + "."
+        parts = split_sentence_parts(text)
+        fillers_by_section = {
+            "WETTER": [
+                "Regional sind dabei weiterhin Unterschiede moeglich.",
+                "Im Tagesverlauf bleibt die Lage unter Beobachtung.",
+            ],
+            "KURIOSES": [
+                "Das Thema sorgt weiter fuer Aufmerksamkeit.",
+                "Weitere Entwicklungen werden zeitnah erwartet.",
+            ],
+        }
+        default_fillers = [
+            "Die Entwicklung wird weiter beobachtet.",
+            "Weitere Details werden im Tagesverlauf erwartet.",
+        ]
+        fillers = fillers_by_section.get(section, default_fillers)
+        idx = 0
+        while len(parts) < minimum:
+            parts.append(fillers[min(idx, len(fillers) - 1)])
+            idx += 1
+        return " ".join(parts)
+
+    def fallback_line(section: str) -> str:
+        if section == "KURIOSES":
+            return "Heute liegt keine passende kuriose Meldung vor."
+        if section == "WETTER":
+            return "Zum Wetter liegt aktuell keine kompakte Deutschland-Meldung vor."
+        if section == "SPORT":
+            return "Keine weitere passende aktuelle Sportmeldung im Feed gefunden."
+        return "Keine weitere passende aktuelle Meldung im Feed gefunden."
+
+    lines: List[str] = []
+    for section in SECTION_ORDER:
+        lines.append(section)
+        bullets = [line.strip() for line in section_lines.get(section, []) if line.strip()]
+        target_count = SECTION_TARGET_COUNTS[section]
+        while len(bullets) < target_count:
+            bullets.append(fallback_line(section))
+        for bullet in bullets:
+            bullet_text = bullet[2:].strip() if bullet.startswith("- ") else bullet
+            bullet_text = ensure_min_sentences(section, bullet_text, minimum=3)
+            lines.append(f"- {bullet_text}")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+def _validate_broadcast_body(text: str) -> bool:
+    if not text.strip():
+        return False
+    if len(text) > 9000:
+        return False
+    lowered = text.lower()
+    banned = ("schreibt uns", "feedback", "podcast", "newsletter", "@")
+    if any(term in lowered for term in banned):
+        return False
+    lines = [line.rstrip() for line in text.splitlines()]
+    sections_seen = []
+    current = None
+    bullet_count = 0
+    section_counts: Dict[str, int] = {name: 0 for name in SECTION_ORDER}
+    for line in lines:
+        if not line:
+            continue
+        if line in SECTION_ORDER:
+            sections_seen.append(line)
+            current = line
+            continue
+        if line.startswith("- "):
+            if current is None:
+                return False
+            bullet_count += 1
+            section_counts[current] += 1
+            if len(line) > 850:
+                return False
+            sentence_count = len([p for p in re.split(r"(?<=[.!?])\s+", line[2:].strip()) if p.strip()])
+            if sentence_count < 3:
+                return False
+            continue
+        return False
+    if sections_seen != SECTION_ORDER:
+        return False
+    for section in SECTION_ORDER:
+        if section_counts[section] < SECTION_TARGET_COUNTS[section]:
+            return False
+    return bullet_count >= sum(SECTION_TARGET_COUNTS.values())
+
+
+def _redact_items_with_openai(
+    api_key: str,
+    model: str,
+    items_by_id: Dict[str, str],
+) -> Dict[str, str]:
+    payload_items = [{"id": item_id, "text": text} for item_id, text in items_by_id.items()]
+    user_payload = {"items": payload_items}
+    prompt = (
+        "Redigiere jede Meldung in neutrales, knappes Nachrichtenradio-Deutsch. "
+        "Regeln: mindestens drei Saetze pro Meldung, maximal 700 Zeichen, keine Calls-to-Action, "
+        "keine Quellenhinweise, keine Autoren, keine E-Mail-Adressen. "
+        "Bedeutung erhalten, nichts hinzuerfinden. "
+        "Antworte NUR als JSON: {\"items\":[{\"id\":\"...\",\"text\":\"...\"}]}. "
+        f"Eingabe: {json.dumps(user_payload, ensure_ascii=False)}"
+    )
+    raw = _openai_chat_completion(
+        api_key=api_key,
+        model=model,
+        messages=[
+            {"role": "developer", "content": "Du redigierst RSS-Meldungen fuer ein deutsches Nachrichtenradio."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.1,
+        response_format={"type": "json_object"},
+    )
+    parsed = _extract_json_object(raw)
+    result: Dict[str, str] = {}
+    for entry in parsed.get("items", []):
+        item_id = str(entry.get("id", "")).strip()
+        text = _clean_text(str(entry.get("text", "")).strip())
+        if not item_id or not text:
+            continue
+        result[item_id] = _shorten(text, max_chars=700)
+    return result
+
+
+def _polish_body_with_openai(api_key: str, model: str, body: str) -> str:
+    prompt = (
+        "Ueberarbeite den folgenden Nachrichtentext fuer stuedliche Audio-Ausstrahlung. "
+        "Regeln strikt einhalten: "
+        "1) Behalte exakt diese Ueberschriften und Reihenfolge: TOP-THEMA, DEUTSCHLAND, EUROPA, WELT, SPORT, KURIOSES, WETTER. "
+        "2) Unter jeder Ueberschrift nur Aufzaehlungszeilen mit '- '. "
+        "3) Anzahl Meldungen exakt: TOP-THEMA 2, DEUTSCHLAND 3, EUROPA 3, WELT 3, SPORT 2, KURIOSES 1, WETTER 1. "
+        "4) Jede Meldung mindestens drei Saetze. "
+        "5) Jede Meldung maximal 700 Zeichen. "
+        "6) Kein Podcast-, Newsletter-, Feedback- oder Quellenstil. "
+        "7) Gesamter Text maximal 9000 Zeichen. "
+        "Gib nur den finalen Text zurueck, ohne Codeblock.\n\n"
+        f"{body}"
+    )
+    return _openai_chat_completion(
+        api_key=api_key,
+        model=model,
+        messages=[
+            {"role": "developer", "content": "Du bist Chef vom Nachrichtenradio-Lektorat."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.0,
+    ).strip()
+
+
+def _repair_body_with_openai(api_key: str, model: str, body: str) -> str:
+    prompt = (
+        "Korrigiere den Text strikt in dieses Format und gib nur den Text zurueck: "
+        "TOP-THEMA, DEUTSCHLAND, EUROPA, WELT, SPORT, KURIOSES, WETTER. "
+        "Unter jeder Ueberschrift nur Zeilen mit '- '. "
+        "Anzahl Meldungen exakt: TOP-THEMA 2, DEUTSCHLAND 3, EUROPA 3, WELT 3, SPORT 2, KURIOSES 1, WETTER 1. "
+        "Jede Meldung mindestens drei kurze Aussagesaetze, maximal 700 Zeichen. "
+        "Keine Werbung, keine Rueckfragen, keine E-Mails, keine Quellen. "
+        "Maximal 9000 Zeichen.\n\n"
+        f"{body}"
+    )
+    return _openai_chat_completion(
+        api_key=api_key,
+        model=model,
+        messages=[
+            {"role": "developer", "content": "Du reparierst nur Format und Kuerze fuer Nachrichtensendungen."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.0,
+    ).strip()
 
 def _parse_rss_items(xml_text: str, max_items: int = 50) -> List[FeedItem]:
     root = ET.fromstring(xml_text)
@@ -378,37 +718,6 @@ def _select_curious_item(
     primary_pool: List[FeedItem],
     fallback_pool: List[FeedItem],
 ) -> Optional[FeedItem]:
-    positive = (
-        "kurios",
-        "skurril",
-        "ungewoehnlich",
-        "ungewoehnliche",
-        "rekord",
-        "tier",
-        "verblueffend",
-        "entdeckt",
-        "sensation",
-        "witz",
-        "humor",
-        "impression",
-    )
-    negative = (
-        "krieg",
-        "angriff",
-        "bomb",
-        "regierung",
-        "kanzler",
-        "wahl",
-        "konflikt",
-        "toete",
-        "verletz",
-        "nahost",
-        "iran",
-        "israel",
-        "ukraine",
-        "russland",
-    )
-
     best_item: Optional[FeedItem] = None
     best_score = -10_000
     for pool in (primary_pool, fallback_pool):
@@ -416,15 +725,19 @@ def _select_curious_item(
             link = item.get("link", "")
             if not link or link in used_links:
                 continue
+            if not _is_recent_item(item, max_age_hours=30):
+                continue
+            if _is_noise_item(item):
+                continue
             haystack = f"{item.get('title', '')} {item.get('description', '')}".lower()
             score = 0
-            if any(word in haystack for word in positive):
+            if any(word in haystack for word in CURIOUS_POSITIVE_KEYWORDS):
                 score += 8
             if "/wissen/" in link or "/multimedia/" in link or "/wetter/" in link:
                 score += 5
             if "/inland/" in link or "/ausland/" in link:
                 score -= 2
-            if any(word in haystack for word in negative):
+            if any(word in haystack for word in CURIOUS_NEGATIVE_KEYWORDS):
                 score -= 10
             if score > best_score:
                 best_score = score
@@ -444,35 +757,56 @@ def _safe_fetch_feed(name: str) -> List[FeedItem]:
         return []
 
 
-def build_tagesschau_news_text(sport_items: int = 2) -> str:
-    all_items = _safe_fetch_feed("all")
-    inland_items = _safe_fetch_feed("inland")
-    europa_items = _safe_fetch_feed("europa")
-    ausland_items = _safe_fetch_feed("ausland")
-    wissen_items = _safe_fetch_feed("wissen")
-    wetter_items = _safe_fetch_feed("wetter")
-    sport_feed_items = _safe_fetch_feed("sport")
+def _serialize_sections_for_debug(section_items: Dict[str, List[FeedItem]]) -> Dict[str, List[dict]]:
+    out: Dict[str, List[dict]] = {}
+    for section in SECTION_ORDER:
+        items = section_items.get(section, [])
+        out[section] = [
+            {
+                "title": _clean_text(item.get("title", "")),
+                "description": _clean_text(item.get("description", "")),
+                "link": item.get("link", ""),
+                "pubDate": item.get("pubDate", ""),
+            }
+            for item in items
+        ]
+    return out
+
+
+def build_tagesschau_news_package(
+    sport_items: int = 2,
+    api_key: Optional[str] = None,
+    openai_model: str = DEFAULT_OPENAI_MODEL,
+) -> dict:
+    all_items = _filter_items(_safe_fetch_feed("all"))
+    inland_items = _filter_items(_safe_fetch_feed("inland"))
+    europa_items = _filter_items(_safe_fetch_feed("europa"))
+    ausland_items = _filter_items(_safe_fetch_feed("ausland"))
+    wissen_items = _filter_items(_safe_fetch_feed("wissen"))
+    wetter_items = _filter_items(_safe_fetch_feed("wetter"), max_desc_chars=260)
+    sport_feed_items = _filter_items(_safe_fetch_feed("sport"), max_desc_chars=260)
 
     if not all_items:
         raise RuntimeError("Tagesschau-Feed konnte nicht geladen werden")
 
     used_links: set[str] = set()
+    section_items: Dict[str, List[FeedItem]] = {name: [] for name in SECTION_ORDER}
 
-    top_theme = _pick_items(all_items, 2, used_links)
+    section_items["TOP-THEMA"] = _pick_items(all_items, SECTION_TARGET_COUNTS["TOP-THEMA"], used_links)
 
-    deutschland = _pick_items(inland_items, 3, used_links)
-    deutschland = _fill_with_fallback(
+    deutschland = _pick_items(inland_items, SECTION_TARGET_COUNTS["DEUTSCHLAND"], used_links)
+    section_items["DEUTSCHLAND"] = _fill_with_fallback(
         deutschland,
-        3,
+        SECTION_TARGET_COUNTS["DEUTSCHLAND"],
         used_links,
         [all_items],
         predicate=lambda it: "/inland/" in it.get("link", ""),
     )
 
-    europa = _pick_items(europa_items, 3, used_links)
-    europa = _fill_with_fallback(
+    europa = _pick_items(europa_items, SECTION_TARGET_COUNTS["EUROPA"], used_links)
+    section_items["EUROPA"] = _fill_with_fallback(
         europa,
-        3,
+        SECTION_TARGET_COUNTS["EUROPA"],
         used_links,
         [all_items, ausland_items],
         predicate=lambda it: "/ausland/europa/" in it.get("link", ""),
@@ -480,29 +814,31 @@ def build_tagesschau_news_text(sport_items: int = 2) -> str:
 
     welt = _pick_items(
         ausland_items,
-        3,
+        SECTION_TARGET_COUNTS["WELT"],
         used_links,
         predicate=lambda it: "/ausland/europa/" not in it.get("link", ""),
     )
-    welt = _fill_with_fallback(
+    section_items["WELT"] = _fill_with_fallback(
         welt,
-        3,
+        SECTION_TARGET_COUNTS["WELT"],
         used_links,
         [all_items],
         predicate=lambda it: "/ausland/" in it.get("link", "") and "/ausland/europa/" not in it.get("link", ""),
     )
 
-    sport_count = min(max(int(sport_items), 1), 2)
+    sport_count = SECTION_TARGET_COUNTS["SPORT"] if int(sport_items) > 0 else 0
     sport = _pick_items(sport_feed_items, sport_count, used_links)
-    if not sport:
+    if not sport and sport_count > 0:
         sport = _pick_items(
             all_items,
             sport_count,
             used_links,
             predicate=lambda it: "/sport/" in it.get("link", ""),
         )
+    section_items["SPORT"] = sport
 
     curious = _select_curious_item(used_links, all_items, wissen_items)
+    section_items["KURIOSES"] = [curious] if curious else []
 
     wetter_de = _pick_items(
         wetter_items,
@@ -512,44 +848,95 @@ def build_tagesschau_news_text(sport_items: int = 2) -> str:
     )
     if not wetter_de:
         wetter_de = _pick_items(wetter_items, 1, used_links)
+    section_items["WETTER"] = wetter_de
 
-    def section(title: str, items: List[FeedItem], max_chars: int = 0) -> List[str]:
-        lines = [title]
-        if not items:
-            lines.append("- Keine passende aktuelle Meldung im Feed gefunden.")
-            return lines
-        for item in items:
-            lines.append(f"- {_render_item(item, max_chars=max_chars)}")
-        return lines
+    local_section_lines: Dict[str, List[str]] = {}
+    item_by_id: Dict[str, str] = {}
+    line_to_section: Dict[str, str] = {}
+    idx = 1
+    for section in SECTION_ORDER:
+        lines: List[str] = []
+        for item in section_items.get(section, []):
+            if section == "WETTER":
+                rendered = _render_weather_item(item, max_chars=240)
+            elif section == "KURIOSES":
+                rendered = _render_item(item, max_chars=300)
+            else:
+                rendered = _render_item(item, max_chars=340)
+            if not rendered:
+                continue
+            item_id = f"n{idx:02d}"
+            idx += 1
+            item_by_id[item_id] = rendered
+            line_to_section[item_id] = section
+            lines.append(rendered)
+        local_section_lines[section] = lines
+
+    mode_used = "local"
+    final_section_lines = {name: list(lines) for name, lines in local_section_lines.items()}
+    if api_key and item_by_id:
+        try:
+            redacted = _redact_items_with_openai(api_key, openai_model, item_by_id)
+            if redacted:
+                grouped: Dict[str, List[str]] = {name: [] for name in SECTION_ORDER}
+                for item_id, original in item_by_id.items():
+                    section = line_to_section[item_id]
+                    grouped[section].append(redacted.get(item_id, original))
+                final_section_lines = grouped
+                draft_body = _compose_body_from_sections(grouped)
+                polished = _polish_body_with_openai(api_key, openai_model, draft_body)
+                if _validate_broadcast_body(polished):
+                    mode_used = "openai"
+                    body = polished
+                else:
+                    repaired = _repair_body_with_openai(api_key, openai_model, polished)
+                    if _validate_broadcast_body(repaired):
+                        mode_used = "openai-repair"
+                        body = repaired
+                    elif _validate_broadcast_body(draft_body):
+                        mode_used = "openai-draft"
+                        body = draft_body
+                    else:
+                        body = _compose_body_from_sections(local_section_lines)
+            else:
+                body = _compose_body_from_sections(local_section_lines)
+        except Exception:
+            body = _compose_body_from_sections(local_section_lines)
+    else:
+        body = _compose_body_from_sections(local_section_lines)
+
+    if not _validate_broadcast_body(body):
+        body = _compose_body_from_sections(local_section_lines)
+        mode_used = "local"
 
     lines: List[str] = []
     lines.append(_build_intro_text())
     lines.append("")
-    lines.extend(section("TOP-THEMA", top_theme))
-    lines.append("")
-    lines.extend(section("DEUTSCHLAND", deutschland))
-    lines.append("")
-    lines.extend(section("EUROPA", europa))
-    lines.append("")
-    lines.extend(section("WELT", welt))
-    lines.append("")
-    lines.extend(section("SPORT", sport))
-    lines.append("")
-    lines.append("KURIOSES")
-    if curious:
-        lines.append(f"- {_render_item(curious, max_chars=0)}")
-    else:
-        lines.append("- Keine passende kuriose Meldung im Feed gefunden.")
-    lines.append("")
-    lines.append("WETTER")
-    if wetter_de:
-        lines.append(f"- {_render_weather_item(wetter_de[0], max_chars=0)}")
-    else:
-        lines.append("- Keine aktuelle Wetter-Meldung im Feed gefunden.")
+    lines.append(body)
     lines.append("")
     lines.append(_build_outro_text())
+    text = "\n".join(lines).strip()
 
-    return "\n".join(lines).strip()
+    return {
+        "text": text,
+        "body": body,
+        "section_lines": final_section_lines,
+        "raw_sections": _serialize_sections_for_debug(section_items),
+        "mode_used": mode_used,
+        "char_count": len(text),
+    }
+
+
+def build_tagesschau_news_text(
+    sport_items: int = 2,
+    api_key: Optional[str] = None,
+    openai_model: str = DEFAULT_OPENAI_MODEL,
+) -> str:
+    return build_tagesschau_news_package(
+        sport_items=sport_items,
+        api_key=api_key,
+        openai_model=openai_model,
+    )["text"]
 
 
 def wav_to_mp3(wav_bytes: bytes, text: str) -> bytes:
@@ -619,6 +1006,7 @@ def main() -> int:
     model_dir = args.model_dir or os.environ.get("TTS_MODEL_DIR", DEFAULT_MODEL_DIR)
     openai_model = args.openai_model or os.environ.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
     prompt = args.prompt if args.prompt is not None else os.environ.get("NEWS_PROMPT")
+    redaction_mode = os.environ.get("TAGESSCHAU_REDACTION_MODE", "auto").strip().lower()
 
     voice = resolve_voice(args.voice)
     speaker = None
@@ -635,7 +1023,17 @@ def main() -> int:
         user_prompt = build_prompt(prompt)
         text = fetch_news_text(api_key, openai_model, user_prompt)
     else:
-        text = build_tagesschau_news_text(sport_items=args.sport_items)
+        api_key = os.environ.get("OPENAI_API_KEY")
+        use_api_key = None
+        if redaction_mode in ("auto", "openai", "required"):
+            use_api_key = api_key
+        if redaction_mode == "required" and not use_api_key:
+            raise SystemExit("OPENAI_API_KEY missing for TAGESSCHAU_REDACTION_MODE=required")
+        text = build_tagesschau_news_text(
+            sport_items=args.sport_items,
+            api_key=use_api_key,
+            openai_model=openai_model,
+        )
 
     if args.text_only:
         print(text)

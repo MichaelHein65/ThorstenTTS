@@ -7,7 +7,7 @@ Dieses Projekt erzeugt stündliche Nachrichten-Texte und MP3-Dateien mit Thorste
 Der Nachrichtentext enthält automatisch:
 
 - Intro:
-  `Und hier die AI-Radio Nachrichten zur vollen Stunde. Es ist <Wochentag>, der <Ordinal-Tag> <Monat> <Jahr> um <naechste volle Stunde> Uhr.`
+  `Und hier die AI-Radio Nachrichten zur vollen Stunde. Es ist <Wochentag>, der <Ordinal-Tag> <Monat> <Jahr>.`
 - Outro:
   `Diese Nachrichten wurden dem Newsfeed der Tagesschau entnommen und von Thorsten TTS gesprochen. Alles wie gewohnt automatisch von AI-Radio.`
 
@@ -21,14 +21,35 @@ Standardquelle ist `tagesschau` (RSS):
 - Tagesschau-Ressorts: Top-Thema, Deutschland, Europa, Welt, Kurioses, Wetter
 - Sport: Sportschau-RSS (da im Tagesschau-Hauptfeed nicht immer Sportmeldungen enthalten sind)
 
+## Rubriken-Layout
+Der Nachrichtenkoerper wird mit festen Zielmengen erzeugt:
+
+- TOP-THEMA: 2 Meldungen
+- DEUTSCHLAND: 3 Meldungen
+- EUROPA: 3 Meldungen
+- WELT: 3 Meldungen
+- SPORT: 2 Meldungen
+- KURIOSES: 1 Meldung
+- WETTER: 1 Meldung
+
+Jede Einzelmeldung hat mindestens 3 Saetze.
+
 ## Segmentierung fuer bessere Sprachpausen
 In `tts_client.py` wird zeilenbasiert segmentiert:
 
 - Ueberschriften sind eigene Sprecheinheiten
-- Meldungen werden satzweise gesprochen
-- Piper nutzt `--sentence_silence` (Default `0.35`)
+- Meldungen (Bullet-Zeilen) werden als gesamter Block gesprochen
+- Piper nutzt `--sentence_silence` (Default `0.50`)
+- Zwischen zwei Sprechbloecken wird zusaetzlich Stille eingefuegt (`TTS_CHUNK_PAUSE_SEC`, Default `0.65`)
 
 Damit entstehen kurze Gedankenpausen zwischen Ueberschriften und Meldungen.
+
+## Redaktionsmodus
+Bei `source=tagesschau` kann OpenAI fuer die Redaktion genutzt werden:
+
+- `TAGESSCHAU_REDACTION_MODE=auto` (Default): OpenAI-Redaktion, mit lokalem Fallback
+- `TAGESSCHAU_REDACTION_MODE=openai`: OpenAI-Redaktion bevorzugt
+- `TAGESSCHAU_REDACTION_MODE=required`: Abbruch ohne `OPENAI_API_KEY`
 
 ## Wichtige Optionen
 
