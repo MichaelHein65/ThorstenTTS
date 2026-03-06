@@ -34,6 +34,15 @@ Der Nachrichtenkoerper wird mit festen Zielmengen erzeugt:
 
 Jede Einzelmeldung hat mindestens 3 Saetze.
 
+### Kurioses-Anti-Repeat
+- `Kurioses` vermeidet Wiederholungen per Link-Historie.
+- Standard: derselbe Link wird fuer `72` Stunden nicht erneut verwendet.
+- Historie: `output/hourly_blocks/curious_history.json`
+- Optional per ENV:
+  - `CURIOUS_REPEAT_BLOCK_HOURS`
+  - `CURIOUS_HISTORY_KEEP_DAYS`
+  - `CURIOUS_HISTORY_FILE`
+
 ## Segmentierung fuer bessere Sprachpausen
 In `tts_client.py` wird zeilenbasiert segmentiert:
 

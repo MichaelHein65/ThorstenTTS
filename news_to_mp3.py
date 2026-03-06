@@ -134,6 +134,9 @@ CURIOUS_POSITIVE_KEYWORDS = (
     "humor",
 )
 
+CURIOUS_REPEAT_BLOCK_HOURS = 72
+CURIOUS_HISTORY_KEEP_DAYS = 14
+
 
 def load_dotenv(path: str) -> None:
     if not os.path.exists(path):
@@ -718,8 +721,40 @@ def _select_curious_item(
     primary_pool: List[FeedItem],
     fallback_pool: List[FeedItem],
 ) -> Optional[FeedItem]:
-    best_item: Optional[FeedItem] = None
-    best_score = -10_000
+    def curious_history_path() -> str:
+        custom = os.environ.get("CURIOUS_HISTORY_FILE", "").strip()
+        if custom:
+            return custom
+        return os.path.join("output", "hourly_blocks", "curious_history.json")
+
+    def load_history(path: str) -> List[dict]:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            return []
+        entries = data.get("entries", []) if isinstance(data, dict) else []
+        if not isinstance(entries, list):
+            return []
+        out: List[dict] = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            link = str(entry.get("link", "")).strip()
+            ts = str(entry.get("ts", "")).strip()
+            if link and ts:
+                out.append({"link": link, "ts": ts})
+        return out
+
+    def save_history(path: str, entries: List[dict]) -> None:
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({"entries": entries}, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    candidates: List[tuple[int, FeedItem]] = []
     for pool in (primary_pool, fallback_pool):
         for item in pool:
             link = item.get("link", "")
@@ -739,13 +774,60 @@ def _select_curious_item(
                 score -= 2
             if any(word in haystack for word in CURIOUS_NEGATIVE_KEYWORDS):
                 score -= 10
-            if score > best_score:
-                best_score = score
-                best_item = item
+            candidates.append((score, item))
 
-    if best_item and best_score > 0:
-        used_links.add(best_item.get("link", ""))
-        return best_item
+    candidates = sorted(candidates, key=lambda pair: pair[0], reverse=True)
+    if not candidates:
+        return None
+
+    now = datetime.now().astimezone()
+    history = load_history(curious_history_path())
+    repeat_block = timedelta(hours=int(os.environ.get("CURIOUS_REPEAT_BLOCK_HOURS", str(CURIOUS_REPEAT_BLOCK_HOURS))))
+    keep_window = timedelta(days=int(os.environ.get("CURIOUS_HISTORY_KEEP_DAYS", str(CURIOUS_HISTORY_KEEP_DAYS))))
+
+    recent_links: set[str] = set()
+    kept_entries: List[dict] = []
+    for entry in history:
+        link = entry["link"]
+        ts_raw = entry["ts"]
+        try:
+            ts = datetime.fromisoformat(ts_raw)
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=now.tzinfo)
+            ts = ts.astimezone()
+        except Exception:
+            continue
+        if now - ts <= keep_window:
+            kept_entries.append({"link": link, "ts": ts.isoformat()})
+        if now - ts <= repeat_block:
+            recent_links.add(link)
+
+    chosen: Optional[FeedItem] = None
+    chosen_score = -10_000
+    for score, item in candidates:
+        link = item.get("link", "")
+        if score <= 0:
+            continue
+        if link in recent_links:
+            continue
+        chosen = item
+        chosen_score = score
+        break
+
+    # Fallback: falls nichts Neues verfuegbar ist, trotzdem bestes positives Item senden.
+    if chosen is None:
+        for score, item in candidates:
+            if score > 0:
+                chosen = item
+                chosen_score = score
+                break
+
+    if chosen and chosen_score > 0:
+        link = chosen.get("link", "")
+        used_links.add(link)
+        kept_entries.append({"link": link, "ts": now.isoformat()})
+        save_history(curious_history_path(), kept_entries[-300:])
+        return chosen
     return None
 
 
