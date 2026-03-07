@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import re
 import shlex
@@ -7,12 +8,47 @@ import socket
 import subprocess
 import sys
 import tempfile
+import textwrap
 import wave
 from typing import Iterable, List, Optional
 
 
 DEFAULT_MODEL_PATH = "/mnt/tts/models/thorsten/de_DE-thorsten-high.onnx"
 DEFAULT_CONFIG_PATH = "/mnt/tts/models/thorsten/de_DE-thorsten-high.onnx.json"
+DEFAULT_COQUI_PYTHON = "/home/pi/Coqui/.venv/bin/python"
+DEFAULT_COQUI_MODEL = "tts_models/multilingual/multi-dataset/xtts_v2"
+
+COQUI_REMOTE_SCRIPT = textwrap.dedent(
+    """
+    import json
+    import sys
+    import traceback
+
+    import soundfile as sf
+    from TTS.api import TTS
+
+    try:
+        payload = json.loads(sys.stdin.buffer.read().decode("utf-8"))
+        tts = TTS(model_name=payload["model_name"], gpu=False)
+        kwargs = {}
+        if payload.get("speaker"):
+            kwargs["speaker"] = payload["speaker"]
+        if payload.get("language"):
+            kwargs["language"] = payload["language"]
+        if payload.get("speaker_wav"):
+            kwargs["speaker_wav"] = payload["speaker_wav"]
+        wav = tts.tts(
+            text=payload["text"],
+            split_sentences=payload.get("split_sentences", True),
+            **kwargs,
+        )
+        sample_rate = getattr(getattr(tts, "synthesizer", None), "output_sample_rate", 24000)
+        sf.write(sys.stdout.buffer, wav, sample_rate, format="WAV", subtype="PCM_16")
+    except Exception:
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)
+    """
+).strip()
 
 
 def _build_piper_cmd(model_path: str, config_path: str, speaker: Optional[int]) -> List[str]:
@@ -35,7 +71,7 @@ def _build_piper_cmd(model_path: str, config_path: str, speaker: Optional[int]) 
 
 
 def _build_remote_cmd(model_path: str, config_path: str, speaker: Optional[int]) -> str:
-    return " ".join(shlex.quote(part) for part in _build_piper_cmd(model_path, config_path, speaker))
+    return shlex.join(_build_piper_cmd(model_path, config_path, speaker))
 
 
 def _is_local_host(host: str) -> bool:
@@ -48,6 +84,18 @@ def _is_local_host(host: str) -> bool:
     except AttributeError:
         pass
     return cleaned in local_names
+
+
+def _format_err(prefix: str, stderr: Optional[bytes]) -> str:
+    detail = ""
+    if stderr:
+        try:
+            detail = stderr.decode("utf-8", errors="replace").strip()
+        except Exception:
+            detail = str(stderr)
+    if detail:
+        return f"{prefix}: {detail}"
+    return prefix
 
 
 def _run_cmd_with_stdin(
@@ -73,7 +121,8 @@ def _run_cmd_with_stdin(
         if proc.stdin is None or proc.stdout is None:
             raise RuntimeError("failed to open process stdin/stdout")
 
-        proc.stdin.write(stdin_data)
+        if stdin_data:
+            proc.stdin.write(stdin_data)
         proc.stdin.close()
 
         while True:
@@ -91,19 +140,17 @@ def _run_cmd_with_stdin(
 
     if proc.returncode != 0:
         raise RuntimeError(_format_err(err_prefix, proc_stderr))
+
     return bytes(output)
 
 
-def _format_err(prefix: str, stderr: Optional[bytes]) -> str:
-    detail = ""
-    if stderr:
-        try:
-            detail = stderr.decode("utf-8", errors="replace").strip()
-        except Exception:
-            detail = str(stderr)
-    if detail:
-        return f"{prefix}: {detail}"
-    return prefix
+def _run_ssh_command(pi_host: str, pi_user: str, remote_command: str, stdin_bytes: bytes) -> bytes:
+    return _run_cmd_with_stdin(
+        ["ssh", f"{pi_user}@{pi_host}", remote_command],
+        stdin_bytes,
+        "SSH command failed",
+        "ssh not found on this system",
+    )
 
 
 def split_sentences(text: str) -> List[str]:
@@ -120,12 +167,9 @@ def split_sentences(text: str) -> List[str]:
             line = line[2:].strip()
             if not line:
                 continue
-            # Ganze Nachricht als Block sprechen, damit zwischen Meldungen
-            # ein deutlicherer Segmentwechsel entsteht.
             out.append(line)
             continue
 
-        # Ueberschriften als eigene Sprecheinheit behandeln.
         if re.fullmatch(r"[A-ZÄÖÜ0-9][A-ZÄÖÜ0-9\s\-]*", line):
             out.append(line + ".")
             continue
@@ -146,7 +190,7 @@ def synthesize_wav(
 ) -> bytes:
     if not isinstance(text, str) or not text.strip():
         raise ValueError("text must be a non-empty string")
-    text = text.strip() + "\n"
+    text_bytes = (text.strip() + "\n").encode("utf-8")
 
     model_path = model_path or DEFAULT_MODEL_PATH
     config_path = config_path or DEFAULT_CONFIG_PATH
@@ -156,7 +200,6 @@ def synthesize_wav(
         except (TypeError, ValueError) as exc:
             raise ValueError("speaker must be an integer") from exc
 
-    text_bytes = text.encode("utf-8")
     if _is_local_host(pi_host):
         return _run_cmd_with_stdin(
             _build_piper_cmd(model_path, config_path, speaker),
@@ -165,13 +208,55 @@ def synthesize_wav(
             "piper not found on this system",
         )
 
-    ssh_cmd = ["ssh", f"{pi_user}@{pi_host}", _build_remote_cmd(model_path, config_path, speaker)]
-    return _run_cmd_with_stdin(
-        ssh_cmd,
+    return _run_ssh_command(
+        pi_host,
+        pi_user,
+        _build_remote_cmd(model_path, config_path, speaker),
         text_bytes,
-        "SSH/Piper failed",
-        "ssh not found on this system",
     )
+
+
+def synthesize_coqui_wav(
+    text: str,
+    pi_host: str,
+    pi_user: str,
+    coqui_python: Optional[str] = None,
+    model_name: Optional[str] = None,
+    speaker: Optional[str] = None,
+    language: Optional[str] = None,
+    speaker_wav: Optional[List[str]] = None,
+    split_sentences: bool = True,
+) -> bytes:
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError("text must be a non-empty string")
+
+    cleaned_speaker = speaker.strip() if isinstance(speaker, str) else None
+    cleaned_language = language.strip() if isinstance(language, str) else None
+    cleaned_wavs = [path.strip() for path in (speaker_wav or []) if isinstance(path, str) and path.strip()]
+
+    payload = {
+        "text": text.strip(),
+        "model_name": (model_name or DEFAULT_COQUI_MODEL).strip(),
+        "speaker": cleaned_speaker or None,
+        "language": cleaned_language or None,
+        "speaker_wav": cleaned_wavs or None,
+        "split_sentences": bool(split_sentences),
+    }
+
+    python_bin = coqui_python or DEFAULT_COQUI_PYTHON
+    stdin_bytes = json.dumps(payload).encode("utf-8")
+    if _is_local_host(pi_host):
+        return _run_cmd_with_stdin(
+            [python_bin, "-c", COQUI_REMOTE_SCRIPT],
+            stdin_bytes,
+            "Local Coqui failed",
+            "coqui python not found on this system",
+        )
+
+    remote_cmd = shlex.quote(python_bin)
+    remote_cmd += " -c "
+    remote_cmd += shlex.quote(COQUI_REMOTE_SCRIPT)
+    return _run_ssh_command(pi_host, pi_user, remote_cmd, stdin_bytes)
 
 
 def merge_wavs(wav_chunks: Iterable[bytes]) -> bytes:
@@ -193,10 +278,6 @@ def merge_wavs(wav_chunks: Iterable[bytes]) -> bytes:
                 if params is None:
                     params = in_wav.getparams()
                     out_wav.setparams(params)
-                else:
-                    # Best-effort merge: keep the first file's params and append frames.
-                    # This avoids hard failures if Piper outputs slightly different headers.
-                    pass
                 out_wav.writeframes(in_wav.readframes(in_wav.getnframes()))
                 if idx < len(chunks) - 1 and params is not None and pause_seconds > 0.0:
                     pause_frames = int(params.framerate * pause_seconds)
@@ -211,19 +292,37 @@ def play_wav_bytes(wav_bytes: bytes) -> None:
     if enabled_raw in {"0", "false", "no", "off"}:
         return
 
-    temp_path: Optional[str] = None
+    source_path: Optional[str] = None
+    play_path: Optional[str] = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-            temp_path = tmp.name
+            source_path = tmp.name
             tmp.write(wav_bytes)
 
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            play_path = tmp.name
+
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            source_path,
+            "-c:a",
+            "pcm_s16le",
+            play_path,
+        ]
+        ffmpeg_proc = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if ffmpeg_proc.returncode != 0:
+            err = ffmpeg_proc.stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(f"ffmpeg playback conversion failed: {err}")
+
         if sys.platform == "darwin":
-            player_cmds = [["afplay", temp_path]]
+            player_cmds = [["afplay", play_path]]
         else:
             player_cmds = [
-                ["aplay", "-q", temp_path],
-                ["paplay", temp_path],
-                ["ffplay", "-autoexit", "-nodisp", "-loglevel", "error", temp_path],
+                ["aplay", "-q", play_path],
+                ["paplay", play_path],
+                ["ffplay", "-autoexit", "-nodisp", "-loglevel", "error", play_path],
             ]
 
         errors: List[str] = []
@@ -241,9 +340,14 @@ def play_wav_bytes(wav_bytes: bytes) -> None:
             raise RuntimeError("no supported audio player found")
         raise RuntimeError("; ".join(errors))
     finally:
-        if temp_path and os.path.exists(temp_path):
+        if source_path and os.path.exists(source_path):
             try:
-                os.remove(temp_path)
+                os.remove(source_path)
+            except OSError:
+                pass
+        if play_path and os.path.exists(play_path):
+            try:
+                os.remove(play_path)
             except OSError:
                 pass
 

@@ -8,11 +8,14 @@
       :root {
         color-scheme: light;
         --bg: #0b0c10;
-        --panel: #11131a;
+        --panel: rgba(17, 19, 26, 0.85);
+        --panel-2: rgba(9, 10, 16, 0.9);
         --accent: #ff7a18;
         --accent-2: #ff3f3a;
         --text: #f4f4f4;
         --muted: #b9c0d0;
+        --border: rgba(255, 255, 255, 0.1);
+        --success: #92d36e;
       }
 
       * {
@@ -34,10 +37,10 @@
       }
 
       main {
-        width: min(900px, 100%);
-        background: rgba(17, 19, 26, 0.85);
+        width: min(1080px, 100%);
+        background: var(--panel);
         border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 20px;
+        border-radius: 24px;
         padding: 28px 28px 32px;
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
         backdrop-filter: blur(6px);
@@ -46,21 +49,27 @@
       header {
         display: flex;
         flex-wrap: wrap;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
         gap: 16px;
-        margin-bottom: 20px;
+        margin-bottom: 24px;
       }
 
       h1 {
         font-family: "Space Grotesk", "IBM Plex Sans", Arial, sans-serif;
-        font-size: clamp(1.6rem, 2.8vw, 2.4rem);
+        font-size: clamp(1.6rem, 2.8vw, 2.6rem);
         margin: 0;
       }
 
       p {
         margin: 6px 0 0;
         color: var(--muted);
+      }
+
+      .badge-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
       }
 
       .badge {
@@ -82,47 +91,120 @@
         gap: 18px;
       }
 
+      .cards {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: 1.1fr 0.9fr;
+      }
+
+      .card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 18px;
+      }
+
+      .card h2 {
+        margin: 0 0 6px;
+        font-size: 1rem;
+        font-family: "Space Grotesk", "IBM Plex Sans", Arial, sans-serif;
+      }
+
+      .card p {
+        margin: 0 0 14px;
+        font-size: 0.9rem;
+      }
+
       label {
         font-size: 0.95rem;
         color: var(--muted);
       }
 
-      select {
+      select,
+      textarea,
+      input[type="text"] {
         width: 100%;
         border-radius: 12px;
         border: 1px solid rgba(255, 255, 255, 0.12);
-        background: rgba(9, 10, 16, 0.9);
+        background: var(--panel-2);
         color: var(--text);
-        padding: 10px 14px;
+        padding: 12px 14px;
         font-size: 0.95rem;
         outline: none;
-        transition: border-color 120ms ease, box-shadow 120ms ease;
-        appearance: none;
+        transition: border-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
       }
 
-      select:focus {
+      select:focus,
+      textarea:focus,
+      input[type="text"]:focus {
         border-color: rgba(255, 122, 24, 0.7);
         box-shadow: 0 0 0 3px rgba(255, 122, 24, 0.2);
       }
 
       textarea {
-        width: 100%;
-        min-height: 200px;
-        border-radius: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        background: rgba(9, 10, 16, 0.9);
-        color: var(--text);
-        padding: 16px;
-        font-size: 1rem;
+        min-height: 220px;
         line-height: 1.5;
         resize: vertical;
-        outline: none;
-        transition: border-color 120ms ease, box-shadow 120ms ease;
       }
 
-      textarea:focus {
-        border-color: rgba(255, 122, 24, 0.7);
-        box-shadow: 0 0 0 3px rgba(255, 122, 24, 0.2);
+      textarea.compact {
+        min-height: 96px;
+      }
+
+      .options {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+
+      .field-wide {
+        grid-column: 1 / -1;
+      }
+
+      .subpanel {
+        display: grid;
+        gap: 14px;
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .subpanel-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .subpanel-title strong {
+        font-size: 0.95rem;
+      }
+
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        color: var(--muted);
+      }
+
+      .toggle input {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--accent);
+      }
+
+      .hint {
+        font-size: 0.82rem;
+        color: rgba(255, 255, 255, 0.6);
       }
 
       .controls {
@@ -131,6 +213,12 @@
         gap: 12px;
         align-items: center;
         justify-content: space-between;
+      }
+
+      .btn-row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
       }
 
       .btn {
@@ -143,12 +231,16 @@
         color: #0b0c10;
         background: linear-gradient(135deg, var(--accent), var(--accent-2));
         cursor: pointer;
-        transition: transform 120ms ease, box-shadow 120ms ease;
+        transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+      }
+
+      .btn.secondary {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.08);
       }
 
       .btn:active {
         transform: translateY(1px);
-        box-shadow: 0 6px 16px rgba(255, 122, 24, 0.3);
       }
 
       .btn[disabled] {
@@ -158,7 +250,7 @@
 
       .meta {
         display: flex;
-        gap: 14px;
+        gap: 12px;
         flex-wrap: wrap;
         color: var(--muted);
         font-size: 0.85rem;
@@ -173,25 +265,28 @@
 
       .status {
         min-height: 20px;
-        font-size: 0.9rem;
+        font-size: 0.92rem;
         color: var(--muted);
       }
 
-      .options {
-        display: grid;
-        gap: 14px;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      .status.success {
+        color: var(--success);
       }
 
-      .field {
-        display: grid;
-        gap: 8px;
+      .hidden {
+        display: none !important;
       }
 
       footer {
         margin-top: 18px;
         color: rgba(255, 255, 255, 0.5);
         font-size: 0.75rem;
+      }
+
+      @media (max-width: 900px) {
+        .cards {
+          grid-template-columns: 1fr;
+        }
       }
 
       @media (max-width: 600px) {
@@ -204,6 +299,10 @@
           align-items: stretch;
         }
 
+        .btn-row {
+          width: 100%;
+        }
+
         .btn {
           width: 100%;
         }
@@ -214,108 +313,329 @@
     <main>
       <header>
         <div>
-          <h1>Thorsten TTS</h1>
-          <p>Text eingeben, Sprach-Ausgabe starten, fertig.</p>
+          <h1>Thorsten + Coqui TTS</h1>
+          <p>Piper fuer Thorsten-Stimmen und Coqui XTTS v2 fuer multilingualen Output ueber den Pi 5.</p>
         </div>
-        <div class="badge">Piper · Pi5</div>
+        <div class="badge-row">
+          <div class="badge">Pi5 Bridge</div>
+          <div class="badge">Piper + Coqui</div>
+        </div>
       </header>
 
       <div class="grid">
-        <div>
-          <label for="tts-text">Text</label>
-          <textarea id="tts-text" placeholder="Schreibe hier deinen Text ..."></textarea>
-        </div>
+        <div class="cards">
+          <section class="card">
+            <h2>Text</h2>
+            <p>Die Ausgabe wird auf dem Pi erzeugt und auf dem Mac abgespielt.</p>
+            <div class="field">
+              <label for="tts-text">Eingabetext</label>
+              <textarea id="tts-text" placeholder="Schreibe hier deinen Text ..."></textarea>
+            </div>
+          </section>
 
-        <div class="options">
-          <div class="field">
-            <label for="voice-select">Stimme</label>
-            <select id="voice-select">
-              <option value="neutral" selected>Thorsten High</option>
-              <option value="emotional">Thorsten Emotional</option>
-              <option value="hessisch">Thorsten Hessisch</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="emotion-select">Emotion (nur Emotional)</label>
-            <select id="emotion-select">
-              <option value="neutral" selected>Neutral</option>
-              <option value="happy">Fröhlich</option>
-              <option value="angry">Wütend</option>
-              <option value="disgusted">Angewidert</option>
-              <option value="drunk">Betrunken</option>
-              <option value="sleepy">Schläfrig</option>
-              <option value="surprised">Überrascht</option>
-              <option value="whisper">Flüsternd</option>
-            </select>
-          </div>
+          <section class="card">
+            <h2>Engine</h2>
+            <p>Waehle zwischen den Thorsten-Piper-Stimmen und Coqui XTTS v2.</p>
+            <div class="options">
+              <div class="field">
+                <label for="engine-select">TTS-Engine</label>
+                <select id="engine-select"></select>
+              </div>
+              <div class="field">
+                <label for="model-select">Coqui-Modell</label>
+                <select id="model-select"></select>
+              </div>
+            </div>
+
+            <div class="subpanel" id="piper-panel">
+              <div class="subpanel-title">
+                <strong>Piper Thorsten</strong>
+                <span class="hint">Lokale Thorsten-Modelle auf dem Pi</span>
+              </div>
+              <div class="options">
+                <div class="field">
+                  <label for="voice-select">Stimme</label>
+                  <select id="voice-select"></select>
+                </div>
+                <div class="field">
+                  <label for="emotion-select">Emotion</label>
+                  <select id="emotion-select"></select>
+                </div>
+              </div>
+            </div>
+
+            <div class="subpanel" id="coqui-panel">
+              <div class="subpanel-title">
+                <strong>Coqui XTTS v2</strong>
+                <span class="hint">Mehrsprachig mit Preset-Sprecher oder Referenz-WAV</span>
+              </div>
+              <div class="options">
+                <div class="field">
+                  <label for="language-select">Sprache</label>
+                  <select id="language-select"></select>
+                </div>
+                <div class="field">
+                  <label for="speaker-mode-select">Sprecherquelle</label>
+                  <select id="speaker-mode-select">
+                    <option value="preset">Eingebauter Sprecher</option>
+                    <option value="speaker_wav">Referenz-WAV auf dem Pi</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="speaker-select">Preset-Sprecher</label>
+                  <select id="speaker-select"></select>
+                </div>
+                <div class="field field-wide hidden" id="speaker-wav-field">
+                  <label for="speaker-wav-input">Referenz-WAV Pfad(e) auf dem Pi</label>
+                  <textarea
+                    class="compact"
+                    id="speaker-wav-input"
+                    placeholder="/home/pi/audio/meine_stimme.wav&#10;/home/pi/audio/zweite_probe.wav"
+                  ></textarea>
+                  <div class="hint">Mehrere Pfade sind moeglich. Ein Pfad pro Zeile oder kommagetrennt.</div>
+                </div>
+                <div class="field field-wide">
+                  <label class="toggle" for="split-sentences">
+                    <input id="split-sentences" type="checkbox" checked />
+                    <span>Text in Saetze aufteilen</span>
+                  </label>
+                  <div class="hint">Bei XTTS kann deaktiviertes Splitten den Zusammenhang verbessern, ist aber schwerer fuer die CPU.</div>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
 
         <div class="controls">
-          <button class="btn" id="speak-btn" type="button">Sprich jetzt</button>
-          <button class="btn" id="replay-btn" type="button">Wiederholen</button>
-          <button class="btn" id="download-btn" type="button">MP3 speichern</button>
+          <div class="btn-row">
+            <button class="btn" id="speak-btn" type="button">Sprich jetzt</button>
+            <button class="btn secondary" id="replay-btn" type="button">Wiederholen</button>
+            <button class="btn secondary" id="download-btn" type="button">MP3 speichern</button>
+          </div>
           <div class="meta">
-            <span class="pill">Sprache: Deutsch</span>
-            <span class="pill" id="voice-pill">Stimme: Thorsten High</span>
-            <span class="pill" id="emotion-pill">Emotion: Neutral</span>
+            <span class="pill" id="engine-pill">Engine: Piper</span>
+            <span class="pill" id="model-pill">Modell: Thorsten High</span>
+            <span class="pill" id="language-pill">Sprache: Deutsch</span>
+            <span class="pill" id="speaker-pill">Sprecher: Thorsten High</span>
           </div>
         </div>
         <div class="status" id="status"></div>
       </div>
 
       <footer>
-        Diese Seite ruft lokal deinen TTS-Bridge-Server auf.
+        Diese Seite ruft lokal deinen TTS-Bridge-Server auf und reicht die Synthese an den Pi weiter.
       </footer>
     </main>
 
     <script>
-      const btn = document.getElementById("speak-btn");
+      const fallbackOptions = {
+        engines: [
+          { id: "piper", label: "Piper Thorsten" },
+          { id: "coqui", label: "Coqui XTTS v2" }
+        ],
+        defaults: {
+          engine: "piper",
+          voice: "neutral",
+          emotion: "neutral",
+          coqui_model_name: "tts_models/multilingual/multi-dataset/xtts_v2",
+          coqui_language: "de",
+          coqui_speaker: "Ana Florence",
+          coqui_split_sentences: true,
+          coqui_use_speaker_wav: false,
+          coqui_speaker_wav: ""
+        },
+        piper: {
+          voices: [
+            { id: "neutral", label: "Thorsten High", supports_emotion: false },
+            { id: "emotional", label: "Thorsten Emotional", supports_emotion: true },
+            { id: "hessisch", label: "Thorsten Hessisch", supports_emotion: false }
+          ],
+          emotions: [
+            { id: "happy", label: "Happy" },
+            { id: "angry", label: "Angry" },
+            { id: "disgusted", label: "Disgusted" },
+            { id: "drunk", label: "Drunk" },
+            { id: "neutral", label: "Neutral" },
+            { id: "sleepy", label: "Sleepy" },
+            { id: "surprised", label: "Surprised" },
+            { id: "whisper", label: "Whisper" }
+          ]
+        },
+        coqui: {
+          models: [
+            {
+              id: "tts_models/multilingual/multi-dataset/xtts_v2",
+              label: "XTTS v2",
+              default_language: "de",
+              default_speaker: "Ana Florence",
+              languages: ["en", "es", "fr", "de"],
+              speakers: ["Ana Florence"]
+            }
+          ]
+        }
+      };
+
+      const speakBtn = document.getElementById("speak-btn");
       const replayBtn = document.getElementById("replay-btn");
       const downloadBtn = document.getElementById("download-btn");
       const textArea = document.getElementById("tts-text");
       const statusEl = document.getElementById("status");
+      const engineSelect = document.getElementById("engine-select");
+      const modelSelect = document.getElementById("model-select");
       const voiceSelect = document.getElementById("voice-select");
       const emotionSelect = document.getElementById("emotion-select");
-      const voicePill = document.getElementById("voice-pill");
-      const emotionPill = document.getElementById("emotion-pill");
+      const piperPanel = document.getElementById("piper-panel");
+      const coquiPanel = document.getElementById("coqui-panel");
+      const languageSelect = document.getElementById("language-select");
+      const speakerModeSelect = document.getElementById("speaker-mode-select");
+      const speakerSelect = document.getElementById("speaker-select");
+      const speakerWavField = document.getElementById("speaker-wav-field");
+      const speakerWavInput = document.getElementById("speaker-wav-input");
+      const splitSentences = document.getElementById("split-sentences");
+      const enginePill = document.getElementById("engine-pill");
+      const modelPill = document.getElementById("model-pill");
+      const languagePill = document.getElementById("language-pill");
+      const speakerPill = document.getElementById("speaker-pill");
 
-      function setStatus(msg) {
+      let optionsData = fallbackOptions;
+
+      function setStatus(msg, kind = "") {
         statusEl.textContent = msg;
+        statusEl.className = kind ? `status ${kind}` : "status";
       }
 
-      function updateVoiceUI() {
-        const voiceLabel = voiceSelect.options[voiceSelect.selectedIndex].text;
-        const emotionLabel = emotionSelect.options[emotionSelect.selectedIndex].text;
-        const isEmotional = voiceSelect.value === "emotional";
-        voicePill.textContent = `Stimme: ${voiceLabel}`;
-        emotionPill.textContent = `Emotion: ${isEmotional ? emotionLabel : "—"}`;
-        emotionSelect.disabled = !isEmotional;
-        emotionSelect.style.opacity = isEmotional ? "1" : "0.5";
+      function fillSelect(select, items, selectedValue) {
+        select.innerHTML = "";
+        for (const item of items) {
+          const option = document.createElement("option");
+          option.value = item.id;
+          option.textContent = item.label;
+          if (item.id === selectedValue) option.selected = true;
+          select.appendChild(option);
+        }
+        if (!select.value && items.length) {
+          select.value = items[0].id;
+        }
       }
 
-      voiceSelect.addEventListener("change", updateVoiceUI);
-      emotionSelect.addEventListener("change", updateVoiceUI);
-      updateVoiceUI();
+      function fillStringSelect(select, values, selectedValue) {
+        select.innerHTML = "";
+        for (const value of values) {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = value;
+          if (value === selectedValue) option.selected = true;
+          select.appendChild(option);
+        }
+        if (!select.value && values.length) {
+          select.value = values[0];
+        }
+      }
 
-      btn.addEventListener("click", async () => {
+      function currentCoquiModel() {
+        return optionsData.coqui.models.find((model) => model.id === modelSelect.value) || optionsData.coqui.models[0];
+      }
+
+      function populateBaseOptions() {
+        fillSelect(engineSelect, optionsData.engines, optionsData.defaults.engine);
+        fillSelect(voiceSelect, optionsData.piper.voices, optionsData.defaults.voice);
+        fillSelect(emotionSelect, optionsData.piper.emotions, optionsData.defaults.emotion);
+        fillSelect(
+          modelSelect,
+          optionsData.coqui.models.map((model) => ({ id: model.id, label: model.label })),
+          optionsData.defaults.coqui_model_name
+        );
+        splitSentences.checked = Boolean(optionsData.defaults.coqui_split_sentences);
+        speakerModeSelect.value = optionsData.defaults.coqui_use_speaker_wav ? "speaker_wav" : "preset";
+        speakerWavInput.value = optionsData.defaults.coqui_speaker_wav || "";
+        populateCoquiModelDetails();
+      }
+
+      function populateCoquiModelDetails() {
+        const model = currentCoquiModel();
+        if (!model) return;
+        fillStringSelect(languageSelect, model.languages || [], model.default_language || "de");
+        fillStringSelect(speakerSelect, model.speakers || [], model.default_speaker || "");
+      }
+
+      function updateUI() {
+        const engine = engineSelect.value;
+        const isCoqui = engine === "coqui";
+        const coquiModel = currentCoquiModel();
+        const selectedVoice = optionsData.piper.voices.find((voice) => voice.id === voiceSelect.value);
+        const selectedEmotion = optionsData.piper.emotions.find((emotion) => emotion.id === emotionSelect.value);
+        const useSpeakerWav = speakerModeSelect.value === "speaker_wav";
+
+        piperPanel.classList.toggle("hidden", isCoqui);
+        coquiPanel.classList.toggle("hidden", !isCoqui);
+        modelSelect.disabled = !isCoqui;
+
+        const supportsEmotion = selectedVoice?.supports_emotion === true;
+        emotionSelect.disabled = !supportsEmotion;
+        emotionSelect.style.opacity = supportsEmotion ? "1" : "0.5";
+
+        speakerWavField.classList.toggle("hidden", !isCoqui || !useSpeakerWav);
+        speakerSelect.disabled = !isCoqui || useSpeakerWav;
+        languageSelect.disabled = !isCoqui;
+        splitSentences.disabled = !isCoqui;
+
+        enginePill.textContent = `Engine: ${isCoqui ? "Coqui" : "Piper"}`;
+        if (isCoqui) {
+          modelPill.textContent = `Modell: ${coquiModel?.label || "XTTS v2"}`;
+          languagePill.textContent = `Sprache: ${languageSelect.value || "-"}`;
+          speakerPill.textContent = useSpeakerWav
+            ? "Sprecher: Referenz-WAV"
+            : `Sprecher: ${speakerSelect.value || "-"}`;
+        } else {
+          modelPill.textContent = `Modell: ${selectedVoice?.label || "Thorsten"}`;
+          languagePill.textContent = "Sprache: Deutsch";
+          speakerPill.textContent = supportsEmotion
+            ? `Sprecher: ${selectedEmotion?.label || "Neutral"}`
+            : `Sprecher: ${selectedVoice?.label || "Thorsten"}`;
+        }
+      }
+
+      function buildPayload() {
+        const payload = {
+          text: textArea.value.trim(),
+          engine: engineSelect.value
+        };
+
+        if (engineSelect.value === "coqui") {
+          payload.coqui_model_name = modelSelect.value;
+          payload.coqui_language = languageSelect.value;
+          payload.coqui_split_sentences = splitSentences.checked;
+          payload.coqui_use_speaker_wav = speakerModeSelect.value === "speaker_wav";
+          if (payload.coqui_use_speaker_wav) {
+            payload.coqui_speaker_wav = speakerWavInput.value.trim();
+          } else {
+            payload.coqui_speaker = speakerSelect.value;
+          }
+          return payload;
+        }
+
+        payload.voice = voiceSelect.value;
+        if (voiceSelect.value === "emotional") {
+          payload.emotion = emotionSelect.value;
+        }
+        return payload;
+      }
+
+      async function handleSpeak() {
         const text = textArea.value.trim();
         if (!text) {
           setStatus("Bitte Text eingeben.");
           return;
         }
 
-        btn.disabled = true;
-        setStatus("Sende Text an Pi5 ...");
+        speakBtn.disabled = true;
+        setStatus(engineSelect.value === "coqui" ? "Sende Coqui-Job an Pi 5 ..." : "Sende Piper-Job an Pi 5 ...");
 
         try {
-          const payload = { text, voice: voiceSelect.value };
-          if (voiceSelect.value === "emotional") {
-            payload.emotion = emotionSelect.value;
-          }
           const res = await fetch("/speak", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(buildPayload())
           });
 
           if (!res.ok) {
@@ -336,21 +656,25 @@
             const { value, done } = await reader.read();
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
-            let lines = buffer.split("\n");
+            const lines = buffer.split("\n");
             buffer = lines.pop() || "";
+
             for (const line of lines) {
               const trimmed = line.trim();
               if (!trimmed) continue;
+
               if (trimmed.startsWith("START")) {
                 const total = trimmed.split(" ")[1] || "";
-                setStatus(`Starte Synthese (${total} Sätze) ...`);
+                setStatus(`Starte Synthese (${total} Abschnitt${total === "1" ? "" : "e"}) ...`);
               } else if (trimmed.startsWith("PROGRESS")) {
                 const progress = trimmed.split(" ")[1] || "";
                 setStatus(`Synthese: ${progress}`);
+              } else if (trimmed.startsWith("INFO")) {
+                setStatus(trimmed.slice(5));
               } else if (trimmed.startsWith("SAVED")) {
-                setStatus(`Gespeichert: ${trimmed.slice(6)}`);
+                setStatus(`Gespeichert: ${trimmed.slice(6)}`, "success");
               } else if (trimmed.startsWith("DONE")) {
-                setStatus("Fertig abgespielt.");
+                setStatus("Fertig abgespielt.", "success");
               } else if (trimmed.startsWith("ERROR")) {
                 setStatus(`Fehler: ${trimmed.slice(6)}`);
               } else if (trimmed.startsWith("WARNING")) {
@@ -361,9 +685,38 @@
         } catch (err) {
           setStatus(`Fehler: ${err.message || err}`);
         } finally {
-          btn.disabled = false;
+          speakBtn.disabled = false;
         }
+      }
+
+      async function loadOptions() {
+        try {
+          const res = await fetch("/options");
+          if (!res.ok) throw new Error(`Fehler ${res.status}`);
+          optionsData = await res.json();
+        } catch (err) {
+          setStatus(`Hinweis: Fallback-Optionen aktiv (${err.message || err}).`);
+          optionsData = fallbackOptions;
+        }
+
+        populateBaseOptions();
+        updateUI();
+      }
+
+      engineSelect.addEventListener("change", updateUI);
+      modelSelect.addEventListener("change", () => {
+        populateCoquiModelDetails();
+        updateUI();
       });
+      voiceSelect.addEventListener("change", updateUI);
+      emotionSelect.addEventListener("change", updateUI);
+      languageSelect.addEventListener("change", updateUI);
+      speakerModeSelect.addEventListener("change", updateUI);
+      speakerSelect.addEventListener("change", updateUI);
+      splitSentences.addEventListener("change", updateUI);
+      speakerWavInput.addEventListener("input", updateUI);
+
+      speakBtn.addEventListener("click", handleSpeak);
 
       replayBtn.addEventListener("click", async () => {
         replayBtn.disabled = true;
@@ -374,7 +727,7 @@
             const msg = await res.text().catch(() => "");
             throw new Error(msg || `Fehler (${res.status})`);
           }
-          setStatus("Wiederholung gestartet.");
+          setStatus("Wiederholung gestartet.", "success");
         } catch (err) {
           setStatus(`Fehler: ${err.message || err}`);
         } finally {
@@ -383,7 +736,7 @@
       });
 
       downloadBtn.addEventListener("click", async () => {
-        const name = prompt("Dateiname für MP3:", "tts.mp3");
+        const name = prompt("Dateiname fuer MP3:", "tts.mp3");
         if (!name) return;
         downloadBtn.disabled = true;
         setStatus("Speichere MP3 auf Pi5Platte ...");
@@ -399,13 +752,15 @@
           }
           const data = await res.json().catch(() => ({}));
           if (!data.ok) throw new Error(data.error || "Unbekannter Fehler");
-          setStatus(`Gespeichert: ${data.path || "OK"}`);
+          setStatus(`Gespeichert: ${data.path || "OK"}`, "success");
         } catch (err) {
           setStatus(`Fehler: ${err.message || err}`);
         } finally {
           downloadBtn.disabled = false;
         }
       });
+
+      loadOptions();
     </script>
   </body>
 </html>

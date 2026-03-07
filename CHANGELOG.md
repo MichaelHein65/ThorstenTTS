@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 - 2026-03-07
+- Extend the UI and backend from Piper-only to Piper plus Coqui XTTS v2.
+- Add dynamic engine, model, language, speaker and reference-WAV options via `/options`.
+- Add Coqui synthesis routing over SSH to the Pi and normalize playback for local macOS output.
+- Document the combined Piper/Coqui setup, XTTS compatibility pin and generated demo voices.
+
 ## 0.3.0 - 2026-02-06
 - Add news automation script using OpenAI API to generate text and synthesize MP3.
 - Document .env configuration and news automation usage.
