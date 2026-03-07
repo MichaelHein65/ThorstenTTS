@@ -18,6 +18,7 @@ DEFAULT_OUTPUT = os.path.join("Nachrichten", "Aktuell.mp3")
 DEFAULT_MODEL_DIR = "/mnt/tts/models/thorsten"
 DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 DEFAULT_NEWS_SOURCE = "tagesschau"
+DEFAULT_TAGESSCHAU_REDACTION_MODE = "required"
 
 TAGESSCHAU_FEEDS = {
     "all": "https://www.tagesschau.de/infoservices/alle-meldungen-100~rss2.xml",
@@ -548,10 +549,13 @@ def _redact_items_with_openai(
     payload_items = [{"id": item_id, "text": text} for item_id, text in items_by_id.items()]
     user_payload = {"items": payload_items}
     prompt = (
-        "Redigiere jede Meldung in neutrales, knappes Nachrichtenradio-Deutsch. "
+        "Formuliere jede Meldung als sinngemaesse Neufassung fuer Nachrichtenradio. "
+        "Die Ausgabe soll klar, locker und leicht jugendlich klingen, aber faktisch-serioes bleiben. "
         "Regeln: mindestens drei Saetze pro Meldung, maximal 700 Zeichen, keine Calls-to-Action, "
         "keine Quellenhinweise, keine Autoren, keine E-Mail-Adressen. "
         "Bedeutung erhalten, nichts hinzuerfinden. "
+        "Keine woertliche Uebernahme kompletter Saetze aus der Eingabe. "
+        "Eigennamen, Orte, Zahlen und Zeitangaben duerfen uebernommen werden, Formulierungen muessen neu sein. "
         "Antworte NUR als JSON: {\"items\":[{\"id\":\"...\",\"text\":\"...\"}]}. "
         f"Eingabe: {json.dumps(user_payload, ensure_ascii=False)}"
     )
@@ -559,7 +563,13 @@ def _redact_items_with_openai(
         api_key=api_key,
         model=model,
         messages=[
-            {"role": "developer", "content": "Du redigierst RSS-Meldungen fuer ein deutsches Nachrichtenradio."},
+            {
+                "role": "developer",
+                "content": (
+                    "Du redigierst RSS-Meldungen fuer ein deutsches Nachrichtenradio. "
+                    "Du paraphrasierst konsequent und uebernimmst keine Originalsaetze."
+                ),
+            },
             {"role": "user", "content": prompt},
         ],
         temperature=0.1,
@@ -586,7 +596,9 @@ def _polish_body_with_openai(api_key: str, model: str, body: str) -> str:
         "4) Jede Meldung mindestens drei Saetze. "
         "5) Jede Meldung maximal 700 Zeichen. "
         "6) Kein Podcast-, Newsletter-, Feedback- oder Quellenstil. "
-        "7) Gesamter Text maximal 9000 Zeichen. "
+        "7) Jede Meldung bleibt eine sinngemaesse Neufassung, keine Originalsaetze aus RSS uebernehmen. "
+        "8) Locker, modern und gut verstaendlich formulieren, ohne unserioesen Slang. "
+        "9) Gesamter Text maximal 9000 Zeichen. "
         "Gib nur den finalen Text zurueck, ohne Codeblock.\n\n"
         f"{body}"
     )
@@ -609,6 +621,7 @@ def _repair_body_with_openai(api_key: str, model: str, body: str) -> str:
         "Anzahl Meldungen exakt: TOP-THEMA 2, DEUTSCHLAND 3, EUROPA 3, WELT 3, SPORT 2, KURIOSES 1, WETTER 1. "
         "Jede Meldung mindestens drei kurze Aussagesaetze, maximal 700 Zeichen. "
         "Keine Werbung, keine Rueckfragen, keine E-Mails, keine Quellen. "
+        "Sinngemaess neu formulieren, keine RSS-Originalsaetze uebernehmen. "
         "Maximal 9000 Zeichen.\n\n"
         f"{body}"
     )
@@ -859,6 +872,7 @@ def build_tagesschau_news_package(
     sport_items: int = 2,
     api_key: Optional[str] = None,
     openai_model: str = DEFAULT_OPENAI_MODEL,
+    strict_redaction: bool = False,
 ) -> dict:
     all_items = _filter_items(_safe_fetch_feed("all"))
     inland_items = _filter_items(_safe_fetch_feed("inland"))
@@ -956,14 +970,22 @@ def build_tagesschau_news_package(
 
     mode_used = "local"
     final_section_lines = {name: list(lines) for name, lines in local_section_lines.items()}
+    if strict_redaction and not api_key:
+        raise RuntimeError("Strict redaction requires OPENAI_API_KEY")
     if api_key and item_by_id:
         try:
             redacted = _redact_items_with_openai(api_key, openai_model, item_by_id)
             if redacted:
+                missing_ids = [item_id for item_id in item_by_id if item_id not in redacted]
+                if strict_redaction and missing_ids:
+                    raise RuntimeError(f"OpenAI redaction missing items: {', '.join(missing_ids)}")
                 grouped: Dict[str, List[str]] = {name: [] for name in SECTION_ORDER}
                 for item_id, original in item_by_id.items():
                     section = line_to_section[item_id]
-                    grouped[section].append(redacted.get(item_id, original))
+                    if strict_redaction:
+                        grouped[section].append(redacted[item_id])
+                    else:
+                        grouped[section].append(redacted.get(item_id, original))
                 final_section_lines = grouped
                 draft_body = _compose_body_from_sections(grouped)
                 polished = _polish_body_with_openai(api_key, openai_model, draft_body)
@@ -979,15 +1001,25 @@ def build_tagesschau_news_package(
                         mode_used = "openai-draft"
                         body = draft_body
                     else:
+                        if strict_redaction:
+                            raise RuntimeError("Strict redaction failed after repair and draft validation")
                         body = _compose_body_from_sections(local_section_lines)
             else:
+                if strict_redaction:
+                    raise RuntimeError("OpenAI redaction returned empty result")
                 body = _compose_body_from_sections(local_section_lines)
         except Exception:
+            if strict_redaction:
+                raise
             body = _compose_body_from_sections(local_section_lines)
     else:
+        if strict_redaction:
+            raise RuntimeError("Strict redaction requires redactable items and API access")
         body = _compose_body_from_sections(local_section_lines)
 
     if not _validate_broadcast_body(body):
+        if strict_redaction:
+            raise RuntimeError("Strict redaction produced invalid broadcast body")
         body = _compose_body_from_sections(local_section_lines)
         mode_used = "local"
 
@@ -1013,11 +1045,13 @@ def build_tagesschau_news_text(
     sport_items: int = 2,
     api_key: Optional[str] = None,
     openai_model: str = DEFAULT_OPENAI_MODEL,
+    strict_redaction: bool = False,
 ) -> str:
     return build_tagesschau_news_package(
         sport_items=sport_items,
         api_key=api_key,
         openai_model=openai_model,
+        strict_redaction=strict_redaction,
     )["text"]
 
 
@@ -1088,7 +1122,9 @@ def main() -> int:
     model_dir = args.model_dir or os.environ.get("TTS_MODEL_DIR", DEFAULT_MODEL_DIR)
     openai_model = args.openai_model or os.environ.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
     prompt = args.prompt if args.prompt is not None else os.environ.get("NEWS_PROMPT")
-    redaction_mode = os.environ.get("TAGESSCHAU_REDACTION_MODE", "auto").strip().lower()
+    redaction_mode = os.environ.get(
+        "TAGESSCHAU_REDACTION_MODE", DEFAULT_TAGESSCHAU_REDACTION_MODE
+    ).strip().lower()
 
     voice = resolve_voice(args.voice)
     speaker = None
@@ -1115,6 +1151,7 @@ def main() -> int:
             sport_items=args.sport_items,
             api_key=use_api_key,
             openai_model=openai_model,
+            strict_redaction=(redaction_mode == "required"),
         )
 
     if args.text_only:

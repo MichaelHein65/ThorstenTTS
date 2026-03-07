@@ -56,9 +56,11 @@ Damit entstehen kurze Gedankenpausen zwischen Ueberschriften und Meldungen.
 ## Redaktionsmodus
 Bei `source=tagesschau` kann OpenAI fuer die Redaktion genutzt werden:
 
-- `TAGESSCHAU_REDACTION_MODE=auto` (Default): OpenAI-Redaktion, mit lokalem Fallback
+- `TAGESSCHAU_REDACTION_MODE=required` (Default): Jede Meldung wird per API sinngemaess neu formuliert; ohne API-Key Abbruch
+- `TAGESSCHAU_REDACTION_MODE=auto`: OpenAI-Redaktion, mit lokalem Fallback
 - `TAGESSCHAU_REDACTION_MODE=openai`: OpenAI-Redaktion bevorzugt
-- `TAGESSCHAU_REDACTION_MODE=required`: Abbruch ohne `OPENAI_API_KEY`
+
+Die API-Paraphrase ist auf nicht-woertliche Umformulierung ausgelegt (sinngemaess korrekt, leicht jugendlich, aber serioes).
 
 ## Wichtige Optionen
 
