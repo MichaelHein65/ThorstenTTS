@@ -268,7 +268,7 @@ def _build_intro_text(now: Optional[datetime] = None) -> str:
 def _build_outro_text() -> str:
     return (
         "Diese Nachrichten wurden dem Newsfeed der Tagesschau entnommen und "
-        "von Thorsten TTS gesprochen. Alles wie gewohnt automatisch von AI-Radio."
+        "von Asya Anara fuer AI-Radio gesprochen. Alles wie gewohnt automatisch produziert."
     )
 
 
@@ -376,7 +376,7 @@ def _shorten(text: str, max_chars: int) -> str:
     cleaned = _WS_RE.sub(" ", text).strip()
     if max_chars <= 0 or len(cleaned) <= max_chars:
         return cleaned
-    # Nicht mitten im Satz kuerzen, damit Thorsten vollstaendige Saetze spricht.
+    # Nicht mitten im Satz kuerzen, damit die TTS-Stimme vollstaendige Saetze spricht.
     split = max(cleaned.rfind(".", 0, max_chars), cleaned.rfind("!", 0, max_chars), cleaned.rfind("?", 0, max_chars))
     if split >= int(max_chars * 0.6):
         return cleaned[: split + 1].strip()
@@ -1097,13 +1097,13 @@ def wav_to_mp3(wav_bytes: bytes, text: str) -> bytes:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generate news text and synthesize MP3 with Thorsten")
+    parser = argparse.ArgumentParser(description="Generate news text and synthesize MP3 with AI-Radio TTS")
     parser.add_argument("--pi-host", required=True, help="Pi host (e.g. pi5)")
     parser.add_argument("--pi-user", required=True, help="SSH user (e.g. pi)")
     parser.add_argument("--output", default=DEFAULT_OUTPUT, help="Output MP3 path")
     parser.add_argument("--voice", default="neutral", choices=VOICE_OPTIONS.keys(), help="Voice preset")
     parser.add_argument("--emotion", default="neutral", help="Emotion for emotional voice")
-    parser.add_argument("--model-dir", default=None, help=f"Piper model directory (default: {DEFAULT_MODEL_DIR})")
+    parser.add_argument("--model-dir", default=None, help=f"Piper model directory for legacy backend (default: {DEFAULT_MODEL_DIR})")
     parser.add_argument("--openai-model", default=None, help=f"OpenAI model (default: {DEFAULT_OPENAI_MODEL})")
     parser.add_argument("--prompt", default=None, help="Custom OpenAI prompt")
     parser.add_argument(
