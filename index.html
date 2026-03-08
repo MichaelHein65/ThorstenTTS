@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>TTS Frontpage</title>
+    <title>Thorsten TTS</title>
     <style>
       :root {
         color-scheme: light;
@@ -313,12 +313,12 @@
     <main>
       <header>
         <div>
-          <h1>Thorsten + Coqui TTS</h1>
-          <p>Piper fuer Thorsten-Stimmen und Coqui XTTS v2 fuer multilingualen Output ueber den Pi 5.</p>
+          <h1>Thorsten TTS</h1>
+          <p>Thorsten-Stimmen werden ueber den Pi 5 erzeugt und lokal auf dem Mac abgespielt.</p>
         </div>
         <div class="badge-row">
           <div class="badge">Pi5 Bridge</div>
-          <div class="badge">Piper + Coqui</div>
+          <div class="badge">Thorsten Models</div>
         </div>
       </header>
 
@@ -334,72 +334,21 @@
           </section>
 
           <section class="card">
-            <h2>Engine</h2>
-            <p>Waehle zwischen den Thorsten-Piper-Stimmen und Coqui XTTS v2.</p>
-            <div class="options">
-              <div class="field">
-                <label for="engine-select">TTS-Engine</label>
-                <select id="engine-select"></select>
-              </div>
-              <div class="field">
-                <label for="model-select">Coqui-Modell</label>
-                <select id="model-select"></select>
-              </div>
-            </div>
-
-            <div class="subpanel" id="piper-panel">
+            <h2>Modelle</h2>
+            <p>Die App ist auf die Thorsten-TTS-Modelle begrenzt.</p>
+            <div class="subpanel">
               <div class="subpanel-title">
-                <strong>Piper Thorsten</strong>
+                <strong>Thorsten TTS</strong>
                 <span class="hint">Lokale Thorsten-Modelle auf dem Pi</span>
               </div>
               <div class="options">
                 <div class="field">
-                  <label for="voice-select">Stimme</label>
+                  <label for="voice-select">Modell</label>
                   <select id="voice-select"></select>
                 </div>
                 <div class="field">
                   <label for="emotion-select">Emotion</label>
                   <select id="emotion-select"></select>
-                </div>
-              </div>
-            </div>
-
-            <div class="subpanel" id="coqui-panel">
-              <div class="subpanel-title">
-                <strong>Coqui XTTS v2</strong>
-                <span class="hint">Mehrsprachig mit Preset-Sprecher oder Referenz-WAV</span>
-              </div>
-              <div class="options">
-                <div class="field">
-                  <label for="language-select">Sprache</label>
-                  <select id="language-select"></select>
-                </div>
-                <div class="field">
-                  <label for="speaker-mode-select">Sprecherquelle</label>
-                  <select id="speaker-mode-select">
-                    <option value="preset">Eingebauter Sprecher</option>
-                    <option value="speaker_wav">Referenz-WAV auf dem Pi</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="speaker-select">Preset-Sprecher</label>
-                  <select id="speaker-select"></select>
-                </div>
-                <div class="field field-wide hidden" id="speaker-wav-field">
-                  <label for="speaker-wav-input">Referenz-WAV Pfad(e) auf dem Pi</label>
-                  <textarea
-                    class="compact"
-                    id="speaker-wav-input"
-                    placeholder="/home/pi/audio/meine_stimme.wav&#10;/home/pi/audio/zweite_probe.wav"
-                  ></textarea>
-                  <div class="hint">Mehrere Pfade sind moeglich. Ein Pfad pro Zeile oder kommagetrennt.</div>
-                </div>
-                <div class="field field-wide">
-                  <label class="toggle" for="split-sentences">
-                    <input id="split-sentences" type="checkbox" checked />
-                    <span>Text in Saetze aufteilen</span>
-                  </label>
-                  <div class="hint">Bei XTTS kann deaktiviertes Splitten den Zusammenhang verbessern, ist aber schwerer fuer die CPU.</div>
                 </div>
               </div>
             </div>
@@ -429,20 +378,9 @@
 
     <script>
       const fallbackOptions = {
-        engines: [
-          { id: "piper", label: "Piper Thorsten" },
-          { id: "coqui", label: "Coqui XTTS v2" }
-        ],
         defaults: {
-          engine: "piper",
           voice: "neutral",
-          emotion: "neutral",
-          coqui_model_name: "tts_models/multilingual/multi-dataset/xtts_v2",
-          coqui_language: "de",
-          coqui_speaker: "Ana Florence",
-          coqui_split_sentences: true,
-          coqui_use_speaker_wav: false,
-          coqui_speaker_wav: ""
+          emotion: "neutral"
         },
         piper: {
           voices: [
@@ -460,18 +398,6 @@
             { id: "surprised", label: "Surprised" },
             { id: "whisper", label: "Whisper" }
           ]
-        },
-        coqui: {
-          models: [
-            {
-              id: "tts_models/multilingual/multi-dataset/xtts_v2",
-              label: "XTTS v2",
-              default_language: "de",
-              default_speaker: "Ana Florence",
-              languages: ["en", "es", "fr", "de"],
-              speakers: ["Ana Florence"]
-            }
-          ]
         }
       };
 
@@ -480,18 +406,8 @@
       const downloadBtn = document.getElementById("download-btn");
       const textArea = document.getElementById("tts-text");
       const statusEl = document.getElementById("status");
-      const engineSelect = document.getElementById("engine-select");
-      const modelSelect = document.getElementById("model-select");
       const voiceSelect = document.getElementById("voice-select");
       const emotionSelect = document.getElementById("emotion-select");
-      const piperPanel = document.getElementById("piper-panel");
-      const coquiPanel = document.getElementById("coqui-panel");
-      const languageSelect = document.getElementById("language-select");
-      const speakerModeSelect = document.getElementById("speaker-mode-select");
-      const speakerSelect = document.getElementById("speaker-select");
-      const speakerWavField = document.getElementById("speaker-wav-field");
-      const speakerWavInput = document.getElementById("speaker-wav-input");
-      const splitSentences = document.getElementById("split-sentences");
       const enginePill = document.getElementById("engine-pill");
       const modelPill = document.getElementById("model-pill");
       const languagePill = document.getElementById("language-pill");
@@ -518,101 +434,32 @@
         }
       }
 
-      function fillStringSelect(select, values, selectedValue) {
-        select.innerHTML = "";
-        for (const value of values) {
-          const option = document.createElement("option");
-          option.value = value;
-          option.textContent = value;
-          if (value === selectedValue) option.selected = true;
-          select.appendChild(option);
-        }
-        if (!select.value && values.length) {
-          select.value = values[0];
-        }
-      }
-
-      function currentCoquiModel() {
-        return optionsData.coqui.models.find((model) => model.id === modelSelect.value) || optionsData.coqui.models[0];
-      }
-
       function populateBaseOptions() {
-        fillSelect(engineSelect, optionsData.engines, optionsData.defaults.engine);
         fillSelect(voiceSelect, optionsData.piper.voices, optionsData.defaults.voice);
         fillSelect(emotionSelect, optionsData.piper.emotions, optionsData.defaults.emotion);
-        fillSelect(
-          modelSelect,
-          optionsData.coqui.models.map((model) => ({ id: model.id, label: model.label })),
-          optionsData.defaults.coqui_model_name
-        );
-        splitSentences.checked = Boolean(optionsData.defaults.coqui_split_sentences);
-        speakerModeSelect.value = optionsData.defaults.coqui_use_speaker_wav ? "speaker_wav" : "preset";
-        speakerWavInput.value = optionsData.defaults.coqui_speaker_wav || "";
-        populateCoquiModelDetails();
-      }
-
-      function populateCoquiModelDetails() {
-        const model = currentCoquiModel();
-        if (!model) return;
-        fillStringSelect(languageSelect, model.languages || [], model.default_language || "de");
-        fillStringSelect(speakerSelect, model.speakers || [], model.default_speaker || "");
       }
 
       function updateUI() {
-        const engine = engineSelect.value;
-        const isCoqui = engine === "coqui";
-        const coquiModel = currentCoquiModel();
         const selectedVoice = optionsData.piper.voices.find((voice) => voice.id === voiceSelect.value);
         const selectedEmotion = optionsData.piper.emotions.find((emotion) => emotion.id === emotionSelect.value);
-        const useSpeakerWav = speakerModeSelect.value === "speaker_wav";
-
-        piperPanel.classList.toggle("hidden", isCoqui);
-        coquiPanel.classList.toggle("hidden", !isCoqui);
-        modelSelect.disabled = !isCoqui;
 
         const supportsEmotion = selectedVoice?.supports_emotion === true;
         emotionSelect.disabled = !supportsEmotion;
         emotionSelect.style.opacity = supportsEmotion ? "1" : "0.5";
 
-        speakerWavField.classList.toggle("hidden", !isCoqui || !useSpeakerWav);
-        speakerSelect.disabled = !isCoqui || useSpeakerWav;
-        languageSelect.disabled = !isCoqui;
-        splitSentences.disabled = !isCoqui;
-
-        enginePill.textContent = `Engine: ${isCoqui ? "Coqui" : "Piper"}`;
-        if (isCoqui) {
-          modelPill.textContent = `Modell: ${coquiModel?.label || "XTTS v2"}`;
-          languagePill.textContent = `Sprache: ${languageSelect.value || "-"}`;
-          speakerPill.textContent = useSpeakerWav
-            ? "Sprecher: Referenz-WAV"
-            : `Sprecher: ${speakerSelect.value || "-"}`;
-        } else {
-          modelPill.textContent = `Modell: ${selectedVoice?.label || "Thorsten"}`;
-          languagePill.textContent = "Sprache: Deutsch";
-          speakerPill.textContent = supportsEmotion
-            ? `Sprecher: ${selectedEmotion?.label || "Neutral"}`
-            : `Sprecher: ${selectedVoice?.label || "Thorsten"}`;
-        }
+        enginePill.textContent = "Engine: Thorsten TTS";
+        modelPill.textContent = `Modell: ${selectedVoice?.label || "Thorsten"}`;
+        languagePill.textContent = "Sprache: Deutsch";
+        speakerPill.textContent = supportsEmotion
+          ? `Sprecher: ${selectedEmotion?.label || "Neutral"}`
+          : `Sprecher: ${selectedVoice?.label || "Thorsten"}`;
       }
 
       function buildPayload() {
         const payload = {
           text: textArea.value.trim(),
-          engine: engineSelect.value
+          engine: "piper"
         };
-
-        if (engineSelect.value === "coqui") {
-          payload.coqui_model_name = modelSelect.value;
-          payload.coqui_language = languageSelect.value;
-          payload.coqui_split_sentences = splitSentences.checked;
-          payload.coqui_use_speaker_wav = speakerModeSelect.value === "speaker_wav";
-          if (payload.coqui_use_speaker_wav) {
-            payload.coqui_speaker_wav = speakerWavInput.value.trim();
-          } else {
-            payload.coqui_speaker = speakerSelect.value;
-          }
-          return payload;
-        }
 
         payload.voice = voiceSelect.value;
         if (voiceSelect.value === "emotional") {
@@ -629,7 +476,7 @@
         }
 
         speakBtn.disabled = true;
-        setStatus(engineSelect.value === "coqui" ? "Sende Coqui-Job an Pi 5 ..." : "Sende Piper-Job an Pi 5 ...");
+        setStatus("Sende Thorsten-Job an Pi 5 ...");
 
         try {
           const res = await fetch("/speak", {
@@ -703,18 +550,8 @@
         updateUI();
       }
 
-      engineSelect.addEventListener("change", updateUI);
-      modelSelect.addEventListener("change", () => {
-        populateCoquiModelDetails();
-        updateUI();
-      });
       voiceSelect.addEventListener("change", updateUI);
       emotionSelect.addEventListener("change", updateUI);
-      languageSelect.addEventListener("change", updateUI);
-      speakerModeSelect.addEventListener("change", updateUI);
-      speakerSelect.addEventListener("change", updateUI);
-      splitSentences.addEventListener("change", updateUI);
-      speakerWavInput.addEventListener("input", updateUI);
 
       speakBtn.addEventListener("click", handleSpeak);
 

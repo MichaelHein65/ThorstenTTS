@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 - 2026-03-08
+- Restrict the app model selection to Thorsten TTS voices only.
+- Remove Coqui controls from the web UI and simplify the client payload.
+- Limit `/options` to Thorsten voice data and reject direct Coqui requests.
+- Refresh the README to match the Thorsten-only app behavior.
+
 ## 0.4.0 - 2026-03-07
 - Extend the UI and backend from Piper-only to Piper plus Coqui XTTS v2.
 - Add dynamic engine, model, language, speaker and reference-WAV options via `/options`.

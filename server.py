@@ -244,20 +244,9 @@ def _remote_file_exists(pi_user: str, pi_host: str, path: str) -> bool:
 
 def _build_options_payload() -> dict:
     return {
-        "engines": [
-            {"id": "piper", "label": "Piper Thorsten"},
-            {"id": "coqui", "label": "Coqui XTTS v2"},
-        ],
         "defaults": {
-            "engine": "piper",
             "voice": "neutral",
             "emotion": "neutral",
-            "coqui_model_name": DEFAULT_COQUI_MODEL,
-            "coqui_language": COQUI_MODELS[DEFAULT_COQUI_MODEL]["default_language"],
-            "coqui_speaker": COQUI_MODELS[DEFAULT_COQUI_MODEL]["default_speaker"],
-            "coqui_split_sentences": True,
-            "coqui_use_speaker_wav": False,
-            "coqui_speaker_wav": "",
         },
         "piper": {
             "voices": [
@@ -272,23 +261,6 @@ def _build_options_payload() -> dict:
                 {"id": key, "label": key.capitalize()}
                 for key in EMOTION_SPEAKERS.keys()
             ],
-        },
-        "coqui": {
-            "models": [
-                {
-                    "id": model_name,
-                    "label": config["label"],
-                    "supports_language": config["supports_language"],
-                    "supports_speaker": config["supports_speaker"],
-                    "supports_speaker_wav": config["supports_speaker_wav"],
-                    "supports_split_sentences": config["supports_split_sentences"],
-                    "default_language": config["default_language"],
-                    "default_speaker": config["default_speaker"],
-                    "languages": config["languages"],
-                    "speakers": config["speakers"],
-                }
-                for model_name, config in COQUI_MODELS.items()
-            ]
         },
     }
 
@@ -414,7 +386,7 @@ class TTSHandler(BaseHTTPRequestHandler):
 
         engine = _resolve_engine(payload.get("engine", "piper"))
         if engine == "coqui":
-            self._handle_coqui(payload, text.strip())
+            self.send_error(400, "Only Thorsten TTS is enabled")
             return
         self._handle_piper(payload, text.strip())
 
