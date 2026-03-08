@@ -7,13 +7,14 @@ import socket
 import subprocess
 import sys
 import tempfile
+import unicodedata
 import wave
 from typing import Iterable, List, Optional
 
 
 DEFAULT_MODEL_PATH = "/mnt/tts/models/thorsten/de_DE-thorsten-high.onnx"
 DEFAULT_CONFIG_PATH = "/mnt/tts/models/thorsten/de_DE-thorsten-high.onnx.json"
-DEFAULT_TTS_BACKEND = "coqui"
+DEFAULT_TTS_BACKEND = "piper"
 DEFAULT_COQUI_TTS_BIN = "/home/pi/Coqui/.venv/bin/tts"
 DEFAULT_COQUI_MODEL = "tts_models/multilingual/multi-dataset/xtts_v2"
 DEFAULT_COQUI_LANGUAGE = "de"
@@ -145,12 +146,49 @@ def _format_err(prefix: str, stderr: Optional[bytes]) -> str:
     return prefix
 
 
+def _sanitize_text_for_coqui(text: str) -> str:
+    cleaned = unicodedata.normalize("NFKC", text or "")
+    cleaned = cleaned.replace("\r\n", "\n").replace("\r", "\n")
+    chars = []
+    for ch in cleaned:
+        if ch in "\n\t":
+            chars.append(ch)
+            continue
+        if unicodedata.category(ch) in {"Cc", "Cf", "Cs", "Co", "Cn"}:
+            chars.append(" ")
+            continue
+        chars.append(ch)
+    cleaned = "".join(chars)
+    cleaned = re.sub(r"[‐‑‒]", " ", cleaned)
+    replacements = {
+        "„": "",
+        "“": "",
+        "\"": "",
+        "’": "'",
+        "–": ", ",
+        "—": ", ",
+        "‑": " ",
+        "&": " und ",
+        "/": " ",
+        ";": ",",
+        ":": ",",
+    }
+    for old, new in replacements.items():
+        cleaned = cleaned.replace(old, new)
+    cleaned = re.sub(r"[()\[\]{}<>]", " ", cleaned)
+    cleaned = re.sub(r"\s+,", ",", cleaned)
+    cleaned = re.sub(r"[ \t]+", " ", cleaned)
+    cleaned = re.sub(r" *\n *", "\n", cleaned)
+    return cleaned.strip()
+
+
 def split_sentences(text: str) -> List[str]:
     if not isinstance(text, str):
         return []
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
 
     if _tts_backend() == "coqui":
+        normalized = _sanitize_text_for_coqui(normalized)
         max_chars_raw = os.environ.get("TTS_COQUI_MAX_CHARS", "1800").strip()
         try:
             max_chars = max(400, int(max_chars_raw))
@@ -252,6 +290,9 @@ def synthesize_wav(
         )
 
     settings = _coqui_settings()
+    text = _sanitize_text_for_coqui(text)
+    if not text:
+        raise ValueError("text is empty after Coqui sanitization")
     if _is_local_host(pi_host):
         os.makedirs(settings["work_dir"], exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="xtts_local_", dir=settings["work_dir"]) as tmp:

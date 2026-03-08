@@ -268,7 +268,7 @@ def _build_intro_text(now: Optional[datetime] = None) -> str:
 def _build_outro_text() -> str:
     return (
         "Diese Nachrichten wurden dem Newsfeed der Tagesschau entnommen und "
-        "von Asya Anara fuer AI-Radio gesprochen. Alles wie gewohnt automatisch produziert."
+        "von Thorsten fuer AI-Radio gesprochen. Alles wie gewohnt automatisch produziert."
     )
 
 

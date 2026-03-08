@@ -1,7 +1,7 @@
 # Hourly News Format (ThorstenTTS)
 
 ## Ziel
-Dieses Projekt erzeugt stuendliche Nachrichten-Texte und MP3-Dateien mit Coqui XTTS v2 auf dem Raspberry Pi 5.
+Dieses Projekt erzeugt stuendliche Nachrichten-Texte und MP3-Dateien produktiv mit Thorsten/Piper auf dem Raspberry Pi 5.
 
 ## Intro / Outro
 Der Nachrichtentext enthält automatisch:
@@ -9,7 +9,7 @@ Der Nachrichtentext enthält automatisch:
 - Intro:
   `Und hier die AI-Radio Nachrichten zur vollen Stunde. Es ist <Wochentag>, der <Ordinal-Tag> <Monat> <Jahr>.`
 - Outro:
-  `Diese Nachrichten wurden dem Newsfeed der Tagesschau entnommen und von Asya Anara fuer AI-Radio gesprochen. Alles wie gewohnt automatisch produziert.`
+  `Diese Nachrichten wurden dem Newsfeed der Tagesschau entnommen und von Thorsten fuer AI-Radio gesprochen. Alles wie gewohnt automatisch produziert.`
 
 ## Ordinal-Tag
 Der Kalendertag wird als gesprochenes Ordinal formuliert:
@@ -48,7 +48,7 @@ In `tts_client.py` wird zeilenbasiert segmentiert:
 
 - Ueberschriften sind eigene Sprecheinheiten
 - Meldungen (Bullet-Zeilen) werden als gesamter Block gesprochen
-- XTTS v2 erzeugt pro Segment eine WAV-Datei auf `pi5`
+- Die produktive Stundenproduktion rendert mit Thorsten/Piper auf `pi5`
 - Zwischen zwei Sprechbloecken wird zusaetzlich Stille eingefuegt (`TTS_CHUNK_PAUSE_SEC`, Default `0.65`)
 
 Damit entstehen kurze Gedankenpausen zwischen Ueberschriften und Meldungen.
@@ -72,5 +72,5 @@ Beispiel:
 
 ```bash
 cd /home/pi/ThorstenTTS
-TTS_BACKEND=coqui COQUI_SPEAKER="Asya Anara" python3 news_to_mp3.py --pi-host pi5 --pi-user pi --source tagesschau --output /home/pi/ThorstenTTS/output/Nachrichten_Aktuell_Thorsten_hourly.mp3
+TTS_BACKEND=piper python3 news_to_mp3.py --pi-host localhost --pi-user pi --source tagesschau --output /home/pi/ThorstenTTS/output/Nachrichten_Aktuell_Thorsten_hourly.mp3
 ```
