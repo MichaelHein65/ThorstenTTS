@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0 - 2026-03-11
+- Replace the SSHFS-based `Pi5Platte` workflow with local staging under `~/Documents/PiSync`.
+- Add optional SSH upload of generated MP3 files to `pi5:/mnt/meineplatte/AI_Radio/Thorsten`.
+- Update the web UI status messages to reflect local save plus remote sync.
+- Refresh the README for the mount-free workflow and the local companion upload script.
+
 ## 0.4.1 - 2026-03-08
 - Restrict the app model selection to Thorsten TTS voices only.
 - Remove Coqui controls from the web UI and simplify the client payload.

@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import shlex
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -17,9 +18,10 @@ from tts_client import (
     synthesize_wav,
 )
 
-DEFAULT_SAVE_DIR = "/Users/michaelhein/Pi5Platte/AI_Radio/Thorsten"
+DEFAULT_SAVE_DIR = os.path.expanduser("~/Documents/PiSync/Pi5Platte/AI_Radio/Thorsten")
 DEFAULT_SAVE_NAME = "latest.mp3"
 DEFAULT_MODEL_DIR = "/mnt/tts/models/thorsten"
+DEFAULT_REMOTE_SAVE_DIR = "/mnt/meineplatte/AI_Radio/Thorsten"
 
 VOICE_OPTIONS = {
     "neutral": {
@@ -226,6 +228,60 @@ def _resolve_coqui_speaker_wavs(value: object) -> list[str]:
     return []
 
 
+def _resolve_path(value: object, default: str) -> str:
+    if isinstance(value, str) and value.strip():
+        return os.path.expanduser(value.strip())
+    return os.path.expanduser(default)
+
+
+def _sync_saved_file(
+    local_path: str,
+    remote_host: str,
+    remote_user: str,
+    remote_dir: str,
+) -> dict:
+    remote_dir = (remote_dir or "").strip()
+    if not remote_dir:
+        return {"ok": False, "error": "remote save dir is missing"}
+
+    filename = os.path.basename(local_path)
+    remote_dir_clean = remote_dir.rstrip("/") or "/"
+    remote_path = os.path.join(remote_dir_clean, filename)
+
+    if _is_local_host(remote_host):
+        os.makedirs(remote_dir_clean, exist_ok=True)
+        shutil.copy2(local_path, remote_path)
+        return {"ok": True, "remote_path": remote_path}
+
+    target = f"{remote_user}@{remote_host}" if remote_user else remote_host
+    mkdir_cmd = [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=5",
+        target,
+        f"mkdir -p {shlex.quote(remote_dir_clean)}",
+    ]
+    mkdir_proc = subprocess.run(mkdir_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if mkdir_proc.returncode != 0:
+        err = mkdir_proc.stderr.decode("utf-8", errors="replace").strip()
+        return {"ok": False, "error": f"ssh mkdir failed: {err or 'unknown error'}"}
+
+    copy_cmd = [
+        "scp",
+        "-q",
+        local_path,
+        f"{target}:{remote_path}",
+    ]
+    copy_proc = subprocess.run(copy_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if copy_proc.returncode != 0:
+        err = copy_proc.stderr.decode("utf-8", errors="replace").strip()
+        return {"ok": False, "error": f"scp failed: {err or 'unknown error'}"}
+
+    return {"ok": True, "remote_path": f"{target}:{remote_path}"}
+
+
 def _remote_file_exists(pi_user: str, pi_host: str, path: str) -> bool:
     if _is_local_host(pi_host):
         return os.path.isfile(path)
@@ -329,10 +385,7 @@ class TTSHandler(BaseHTTPRequestHandler):
 
         try:
             mp3_bytes = self.server.wav_to_mp3(self.server.last_wav, self.server.last_text)
-            os.makedirs(self.server.auto_save_dir, exist_ok=True)
-            out_path = os.path.join(self.server.auto_save_dir, filename)
-            with open(out_path, "wb") as f:
-                f.write(mp3_bytes)
+            out_path, sync_result = self.server.save_mp3(mp3_bytes, filename)
         except Exception as exc:
             data = json.dumps({"ok": False, "error": str(exc)}).encode("utf-8")
             self.send_response(500)
@@ -342,7 +395,14 @@ class TTSHandler(BaseHTTPRequestHandler):
             self.wfile.write(data)
             return
 
-        data = json.dumps({"ok": True, "path": out_path}).encode("utf-8")
+        payload = {"ok": True, "path": out_path}
+        if sync_result is not None:
+            payload["sync"] = sync_result
+            if sync_result.get("ok"):
+                payload["remote_path"] = sync_result.get("remote_path")
+            else:
+                payload["warning"] = sync_result.get("error")
+        data = json.dumps(payload).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
@@ -501,11 +561,13 @@ class TTSHandler(BaseHTTPRequestHandler):
         self.server.last_wav = wav_bytes
         try:
             mp3_bytes = self.server.wav_to_mp3(wav_bytes, text)
-            os.makedirs(self.server.auto_save_dir, exist_ok=True)
-            out_path = os.path.join(self.server.auto_save_dir, self.server.auto_save_name)
-            with open(out_path, "wb") as f:
-                f.write(mp3_bytes)
+            out_path, sync_result = self.server.save_mp3(mp3_bytes, self.server.auto_save_name)
             self._send_line(f"SAVED {out_path}")
+            if sync_result is not None:
+                if sync_result.get("ok"):
+                    self._send_line(f"SYNCED {sync_result.get('remote_path')}")
+                else:
+                    self._send_line(f"WARNING sync failed: {sync_result.get('error')}")
         except Exception as exc:
             self._send_line(f"WARNING could not save mp3: {exc}")
 
@@ -527,10 +589,14 @@ class TTSServer(HTTPServer):
         self.pi_user = pi_user
         self.last_wav: bytes | None = None
         self.last_text: str | None = None
-        self.auto_save_dir = os.environ.get("TTS_SAVE_DIR", DEFAULT_SAVE_DIR)
+        self.auto_save_dir = _resolve_path(os.environ.get("TTS_SAVE_DIR"), DEFAULT_SAVE_DIR)
         self.auto_save_name = os.environ.get("TTS_SAVE_NAME", DEFAULT_SAVE_NAME)
         self.model_dir = os.environ.get("TTS_MODEL_DIR", DEFAULT_MODEL_DIR)
         self.coqui_python = os.environ.get("COQUI_PYTHON", DEFAULT_COQUI_PYTHON)
+        self.remote_sync_enabled = _resolve_bool(os.environ.get("TTS_REMOTE_SYNC_ENABLED", "1"), True)
+        self.remote_save_host = os.environ.get("TTS_REMOTE_SAVE_HOST", self.pi_host)
+        self.remote_save_user = os.environ.get("TTS_REMOTE_SAVE_USER", self.pi_user)
+        self.remote_save_dir = os.environ.get("TTS_REMOTE_SAVE_DIR", DEFAULT_REMOTE_SAVE_DIR)
 
     def wav_to_mp3(self, wav_bytes: bytes, text: str) -> bytes:
         wav_path = None
@@ -571,6 +637,22 @@ class TTSServer(HTTPServer):
                     os.remove(mp3_path)
                 except OSError:
                     pass
+
+    def save_mp3(self, mp3_bytes: bytes, filename: str) -> tuple[str, dict | None]:
+        os.makedirs(self.auto_save_dir, exist_ok=True)
+        out_path = os.path.join(self.auto_save_dir, filename)
+        with open(out_path, "wb") as f:
+            f.write(mp3_bytes)
+
+        sync_result = None
+        if self.remote_sync_enabled:
+            sync_result = _sync_saved_file(
+                out_path,
+                self.remote_save_host,
+                self.remote_save_user,
+                self.remote_save_dir,
+            )
+        return out_path, sync_result
 
 
 def main() -> int:

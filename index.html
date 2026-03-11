@@ -520,6 +520,8 @@
                 setStatus(trimmed.slice(5));
               } else if (trimmed.startsWith("SAVED")) {
                 setStatus(`Gespeichert: ${trimmed.slice(6)}`, "success");
+              } else if (trimmed.startsWith("SYNCED")) {
+                setStatus(`Nach Pi5 synchronisiert: ${trimmed.slice(7)}`, "success");
               } else if (trimmed.startsWith("DONE")) {
                 setStatus("Fertig abgespielt.", "success");
               } else if (trimmed.startsWith("ERROR")) {
@@ -576,7 +578,7 @@
         const name = prompt("Dateiname fuer MP3:", "tts.mp3");
         if (!name) return;
         downloadBtn.disabled = true;
-        setStatus("Speichere MP3 auf Pi5Platte ...");
+        setStatus("Speichere MP3 lokal und synchronisiere nach Pi5 ...");
         try {
           const res = await fetch("/download", {
             method: "POST",
@@ -589,7 +591,13 @@
           }
           const data = await res.json().catch(() => ({}));
           if (!data.ok) throw new Error(data.error || "Unbekannter Fehler");
-          setStatus(`Gespeichert: ${data.path || "OK"}`, "success");
+          if (data.sync && data.sync.ok && data.remote_path) {
+            setStatus(`Gespeichert: ${data.path || "OK"} -> ${data.remote_path}`, "success");
+          } else if (data.warning) {
+            setStatus(`Lokal gespeichert: ${data.path || "OK"} (Sync-Warnung: ${data.warning})`);
+          } else {
+            setStatus(`Gespeichert: ${data.path || "OK"}`, "success");
+          }
         } catch (err) {
           setStatus(`Fehler: ${err.message || err}`);
         } finally {

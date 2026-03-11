@@ -7,7 +7,8 @@ Lokale Browser-App fuer Thorsten TTS ueber einen Raspberry Pi 5. Die App ist in 
 - Emotionsauswahl fuer `Thorsten Emotional`
 - Fortschrittsanzeige waehrend der Synthese
 - Replay der letzten Ausgabe ohne Neu-Synthese
-- MP3-Export mit automatischem Speichern nach `/Users/michaelhein/Pi5Platte/AI_Radio/Thorsten/latest.mp3`
+- MP3-Export mit lokalem Staging unter `~/Documents/PiSync/Pi5Platte/AI_Radio/Thorsten/latest.mp3`
+- automatischer SSH-Upload nach `pi5:/mnt/meineplatte/AI_Radio/Thorsten/latest.mp3`
 
 ## Architektur
 - Der Browser spricht mit `server.py` auf dem Mac.
@@ -21,7 +22,7 @@ Lokale Browser-App fuer Thorsten TTS ueber einen Raspberry Pi 5. Die App ist in 
 - macOS mit Python 3
 - `ffmpeg`
 - funktionierender SSH-Zugriff auf den Pi, z. B. Host `pi5`
-- gemountetes Pi-Laufwerk auf dem Mac: `/Users/michaelhein/Pi5Platte`
+- kein SSHFS-Mount notwendig
 
 ### Pi
 - `/usr/local/bin/piper`
@@ -56,8 +57,12 @@ http://127.0.0.1:8080
 
 ## Konfiguration per Umgebungsvariablen
 ```bash
-TTS_SAVE_DIR="/Users/michaelhein/Pi5Platte/AI_Radio/Thorsten" \
+TTS_SAVE_DIR="$HOME/Documents/PiSync/Pi5Platte/AI_Radio/Thorsten" \
 TTS_SAVE_NAME="mein.mp3" \
+TTS_REMOTE_SYNC_ENABLED="1" \
+TTS_REMOTE_SAVE_HOST="pi5" \
+TTS_REMOTE_SAVE_USER="pi" \
+TTS_REMOTE_SAVE_DIR="/mnt/meineplatte/AI_Radio/Thorsten" \
 TTS_MODEL_DIR="/mnt/tts/models/thorsten" \
 python3 "server.py" --host 0.0.0.0 --port 8080 --pi-host pi5 --pi-user pi
 ```
@@ -91,7 +96,7 @@ ssh pi@pi5 "ls -la /mnt/tts/models/thorsten"
 - `GET /options` liefert nur die Thorsten-Modell- und Emotionsoptionen
 - `POST /speak` startet die Thorsten-Synthese
 - `POST /replay` spielt die letzte Ausgabe erneut ab
-- `POST /download` speichert die letzte Ausgabe als MP3
+- `POST /download` speichert die letzte Ausgabe lokal als MP3 und synchronisiert sie optional per SSH
 
 ## Dateien
 - `index.html` - Frontend fuer die Thorsten-Modelauswahl
@@ -107,8 +112,14 @@ Zuletzt geprueft:
 - `node --check` fuer das eingebettete Script in `index.html`
 - `GET /options` mit Thorsten-only-Antwort
 
-## Hinweis zu Finder-Rechten
-Wenn Finder nicht in `/Users/michaelhein/Pi5Platte/AI_Radio/Thorsten` schreiben kann, fehlen Rechte auf dem Pi-Mount. Auf dem Pi:
+## Hinweis zu Remote-Rechten
+Wenn der SSH-Upload nach `pi5:/mnt/meineplatte/AI_Radio/Thorsten` fehlschlaegt, fehlen meist Rechte auf dem Pi-Zielpfad. Auf dem Pi:
 ```bash
 ssh pi@pi5 "sudo chmod o+w /mnt/meineplatte/AI_Radio/Thorsten"
+```
+
+## Direkter Upload ohne App
+Das folgende Skript ist ein lokales Begleitskript auf diesem Mac und nicht Teil dieses Git-Repos:
+```bash
+~/bin/pi5_platte_push.sh "$HOME/Documents/PiSync/Pi5Platte/AI_Radio/Thorsten/latest.mp3"
 ```
