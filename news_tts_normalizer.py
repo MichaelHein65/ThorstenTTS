@@ -85,14 +85,38 @@ def _cardinal_to_german(number: int) -> str:
             return _TENS[tens]
         one_word = "ein" if ones == 1 else _UNITS[ones]
         return f"{one_word}und{_TENS[tens]}"
+    if number < 1000:
+        hundreds = number // 100
+        rest = number % 100
+        prefix = "einhundert" if hundreds == 1 else f"{_UNITS[hundreds]}hundert"
+        if rest == 0:
+            return prefix
+        return prefix + _cardinal_to_german(rest)
+    if number < 10000:
+        thousands = number // 1000
+        rest = number % 1000
+        prefix = "eintausend" if thousands == 1 else f"{_cardinal_to_german(thousands)}tausend"
+        if rest == 0:
+            return prefix
+        return prefix + _cardinal_to_german(rest)
     raise ValueError(f"Unsupported ordinal number: {number}")
 
 
 def _ordinal_to_german(number: int) -> str:
     if number in _ORDINAL_EXACT:
         return _ORDINAL_EXACT[number]
-    if number < 20:
-        return _cardinal_to_german(number) + "te"
+    if number < 100:
+        return _cardinal_to_german(number) + "ste"
+    if number < 1000:
+        rest = number % 100
+        if rest == 0:
+            return _cardinal_to_german(number) + "ste"
+        return _cardinal_to_german(number - rest) + _ordinal_to_german(rest)
+    if number < 10000:
+        rest = number % 1000
+        if rest == 0:
+            return _cardinal_to_german(number) + "ste"
+        return _cardinal_to_german(number - rest) + _ordinal_to_german(rest)
     return _cardinal_to_german(number) + "ste"
 
 
@@ -102,6 +126,14 @@ def _replace_jahrestag_ordinals(text: str) -> str:
         return f"{_ordinal_to_german(ordinal_number)} Jahrestag"
 
     return re.sub(r"\b(\d{1,2})\.\s+Jahrestag\b", repl, text)
+
+
+def _replace_dotted_number_ordinals(text: str) -> str:
+    def repl(match: re.Match[str]) -> str:
+        number = int(match.group(1))
+        return _ordinal_to_german(number)
+
+    return re.sub(r"\b(\d{1,4})\.(?!\d)", repl, text)
 
 
 def _replace_leo_xiv_ordinal(text: str) -> str:
@@ -123,6 +155,7 @@ def _replace_leo_xiv_ordinal(text: str) -> str:
 def normalize_news_tts_text(text: str, catalog_path: Path | None = None) -> str:
     normalized = text
     normalized = _replace_jahrestag_ordinals(normalized)
+    normalized = _replace_dotted_number_ordinals(normalized)
     normalized = _replace_leo_xiv_ordinal(normalized)
 
     catalog = _load_catalog(catalog_path or DEFAULT_CATALOG_PATH)
