@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+- Filter Tagesschau and Sportschau RSS items by `pubDate` before section selection so stale multi-day items are not reused in new hourly news blocks.
+- Document the news freshness environment variables.
+
 ## 0.5.0 - 2026-03-11
 - Replace the SSHFS-based `Pi5Platte` workflow with local staging under `~/Documents/PiSync`.
 - Add optional SSH upload of generated MP3 files to `pi5:/mnt/meineplatte/AI_Radio/Thorsten`.

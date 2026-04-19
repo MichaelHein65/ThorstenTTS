@@ -21,6 +21,23 @@ Standardquelle ist `tagesschau` (RSS):
 - Tagesschau-Ressorts: Top-Thema, Deutschland, Europa, Welt, Kurioses, Wetter
 - Sport: Sportschau-RSS (da im Tagesschau-Hauptfeed nicht immer Sportmeldungen enthalten sind)
 
+## Aktualitaet der Einzelmeldungen
+RSS-Eintraege werden vor der Rubriken-Auswahl nach `pubDate` gefiltert. Dadurch kann ein neuer Nachrichtenblock keine mehrtaegigen Einzelmeldungen aus dem Feed-Fallback uebernehmen.
+
+Defaults:
+
+- normale Nachrichten: maximal `30` Stunden alt
+- Sport: maximal `48` Stunden alt
+- Wetter: maximal `36` Stunden alt
+- Eintraege ohne `pubDate` werden standardmaessig verworfen
+
+Optional per ENV:
+
+- `NEWS_MAX_ITEM_AGE_HOURS`
+- `NEWS_SPORT_MAX_ITEM_AGE_HOURS`
+- `NEWS_WEATHER_MAX_ITEM_AGE_HOURS`
+- `NEWS_REQUIRE_PUBDATE` (`1`/`0`, Default `1`)
+
 ## Rubriken-Layout
 Der Nachrichtenkoerper wird mit festen Zielmengen erzeugt:
 

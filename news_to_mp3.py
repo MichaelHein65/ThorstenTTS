@@ -158,6 +158,9 @@ CURIOUS_POSITIVE_KEYWORDS = (
 
 CURIOUS_REPEAT_BLOCK_HOURS = 72
 CURIOUS_HISTORY_KEEP_DAYS = 14
+NEWS_MAX_ITEM_AGE_HOURS = 30
+NEWS_SPORT_MAX_ITEM_AGE_HOURS = 48
+NEWS_WEATHER_MAX_ITEM_AGE_HOURS = 36
 
 GENERIC_FILLER_SNIPPETS = (
     "die entwicklung wird weiter beobachtet",
@@ -458,11 +461,31 @@ def _parse_pub_date(item: FeedItem) -> Optional[datetime]:
     return dt.astimezone()
 
 
-def _is_recent_item(item: FeedItem, max_age_hours: int) -> bool:
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw not in {"0", "false", "no", "nein", "off"}
+
+
+def _is_recent_item(item: FeedItem, max_age_hours: int, require_pub_date: bool = False) -> bool:
     dt = _parse_pub_date(item)
     if dt is None:
-        return True
+        return not require_pub_date
     age = datetime.now().astimezone() - dt
+    if age < timedelta(minutes=-5):
+        return True
     return age <= timedelta(hours=max_age_hours)
 
 
@@ -476,10 +499,17 @@ def _is_noise_item(item: FeedItem) -> bool:
     return False
 
 
-def _filter_items(items: List[FeedItem], max_desc_chars: int = 380) -> List[FeedItem]:
+def _filter_items(
+    items: List[FeedItem],
+    max_desc_chars: int = 380,
+    max_age_hours: Optional[int] = None,
+    require_pub_date: bool = False,
+) -> List[FeedItem]:
     filtered: List[FeedItem] = []
     for item in items:
         if _is_noise_item(item):
+            continue
+        if max_age_hours is not None and not _is_recent_item(item, max_age_hours, require_pub_date=require_pub_date):
             continue
         desc = _clean_text(item.get("description", ""))
         if len(desc) > max_desc_chars:
@@ -1001,13 +1031,48 @@ def build_tagesschau_news_package(
     openai_model: str = DEFAULT_OPENAI_MODEL,
     strict_redaction: bool = False,
 ) -> dict:
-    all_items = _filter_items(_safe_fetch_feed("all"))
-    inland_items = _filter_items(_safe_fetch_feed("inland"))
-    europa_items = _filter_items(_safe_fetch_feed("europa"))
-    ausland_items = _filter_items(_safe_fetch_feed("ausland"))
-    wissen_items = _filter_items(_safe_fetch_feed("wissen"))
-    wetter_items = _filter_items(_safe_fetch_feed("wetter"), max_desc_chars=900)
-    sport_feed_items = _filter_items(_safe_fetch_feed("sport"), max_desc_chars=260)
+    news_max_age_hours = _env_int("NEWS_MAX_ITEM_AGE_HOURS", NEWS_MAX_ITEM_AGE_HOURS)
+    sport_max_age_hours = _env_int("NEWS_SPORT_MAX_ITEM_AGE_HOURS", NEWS_SPORT_MAX_ITEM_AGE_HOURS)
+    weather_max_age_hours = _env_int("NEWS_WEATHER_MAX_ITEM_AGE_HOURS", NEWS_WEATHER_MAX_ITEM_AGE_HOURS)
+    require_pub_date = _env_bool("NEWS_REQUIRE_PUBDATE", True)
+
+    all_items = _filter_items(
+        _safe_fetch_feed("all"),
+        max_age_hours=news_max_age_hours,
+        require_pub_date=require_pub_date,
+    )
+    inland_items = _filter_items(
+        _safe_fetch_feed("inland"),
+        max_age_hours=news_max_age_hours,
+        require_pub_date=require_pub_date,
+    )
+    europa_items = _filter_items(
+        _safe_fetch_feed("europa"),
+        max_age_hours=news_max_age_hours,
+        require_pub_date=require_pub_date,
+    )
+    ausland_items = _filter_items(
+        _safe_fetch_feed("ausland"),
+        max_age_hours=news_max_age_hours,
+        require_pub_date=require_pub_date,
+    )
+    wissen_items = _filter_items(
+        _safe_fetch_feed("wissen"),
+        max_age_hours=news_max_age_hours,
+        require_pub_date=require_pub_date,
+    )
+    wetter_items = _filter_items(
+        _safe_fetch_feed("wetter"),
+        max_desc_chars=900,
+        max_age_hours=weather_max_age_hours,
+        require_pub_date=require_pub_date,
+    )
+    sport_feed_items = _filter_items(
+        _safe_fetch_feed("sport"),
+        max_desc_chars=260,
+        max_age_hours=sport_max_age_hours,
+        require_pub_date=require_pub_date,
+    )
 
     if not all_items:
         raise RuntimeError("Tagesschau-Feed konnte nicht geladen werden")
@@ -1165,6 +1230,12 @@ def build_tagesschau_news_package(
         "body": body,
         "section_lines": final_section_lines,
         "raw_sections": _serialize_sections_for_debug(section_items),
+        "freshness": {
+            "news_max_age_hours": news_max_age_hours,
+            "sport_max_age_hours": sport_max_age_hours,
+            "weather_max_age_hours": weather_max_age_hours,
+            "require_pub_date": require_pub_date,
+        },
         "mode_used": mode_used,
         "char_count": len(text),
     }

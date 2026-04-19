@@ -67,6 +67,15 @@ TTS_MODEL_DIR="/mnt/tts/models/thorsten" \
 python3 "server.py" --host 0.0.0.0 --port 8080 --pi-host pi5 --pi-user pi
 ```
 
+### News-Aktualitaet
+`news_to_mp3.py` filtert Tagesschau- und Sportschau-RSS-Eintraege vor der Rubriken-Auswahl nach `pubDate`. Dadurch werden keine mehrtaegigen Einzelmeldungen in einen neuen Nachrichtenblock uebernommen.
+
+Defaults:
+- `NEWS_MAX_ITEM_AGE_HOURS=30`
+- `NEWS_SPORT_MAX_ITEM_AGE_HOURS=48`
+- `NEWS_WEATHER_MAX_ITEM_AGE_HOURS=36`
+- `NEWS_REQUIRE_PUBDATE=1`
+
 ## Bedienung
 - Modell auswaehlen
 - bei `Thorsten Emotional` optional eine Emotion setzen
