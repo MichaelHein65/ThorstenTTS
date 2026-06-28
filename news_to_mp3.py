@@ -104,6 +104,27 @@ NOISE_KEYWORDS = (
     "mediathek",
 )
 
+WEATHER_SERVICE_KEYWORDS = (
+    "regenradar",
+    "niederschlagsradar",
+    "aktueller niederschlag",
+    "live-werte",
+    "livewerte",
+    "unwetterkarte",
+    "warnungen",
+    "warnsituation",
+    "wetterimpressionen",
+    "wetterbilder",
+)
+
+WEATHER_FORECAST_KEYWORDS = (
+    "wettervorhersage",
+    "wetter deutschland",
+    "wetterlage",
+    "aussichten",
+    "temperaturen",
+)
+
 CURIOUS_NEGATIVE_KEYWORDS = (
     "krieg",
     "angriff",
@@ -137,6 +158,46 @@ CURIOUS_POSITIVE_KEYWORDS = (
 
 CURIOUS_REPEAT_BLOCK_HOURS = 72
 CURIOUS_HISTORY_KEEP_DAYS = 14
+NEWS_MAX_ITEM_AGE_HOURS = 30
+NEWS_SPORT_MAX_ITEM_AGE_HOURS = 48
+NEWS_WEATHER_MAX_ITEM_AGE_HOURS = 36
+
+GENERIC_FILLER_SNIPPETS = (
+    "die entwicklung wird weiter beobachtet",
+    "weitere details werden im tagesverlauf erwartet",
+    "das thema sorgt weiter fuer aufmerksamkeit",
+    "das thema sorgt weiter für aufmerksamkeit",
+    "weitere entwicklungen werden zeitnah erwartet",
+    "regional sind dabei weiterhin unterschiede moeglich",
+    "regional sind dabei weiterhin unterschiede möglich",
+    "im tagesverlauf bleibt die lage unter beobachtung",
+)
+
+EDITORIAL_FLUFF_SNIPPETS = (
+    "wird in den kommenden monaten entscheidend sein",
+    "zeigt, wie unterschiedlich",
+    "zeigt die komplexitaet",
+    "zeigt die komplexität",
+    "bleibt spannend",
+    "voller moeglichkeiten",
+    "voller möglichkeiten",
+    "erfordert internationale aufmerksamkeit",
+    "wird damit neu entfacht",
+    "sorgt fuer diskussionen",
+    "sorgt für diskussionen",
+    "bringt frischen wind",
+    "perspektiven fuer das unternehmen sind unklar",
+    "perspektiven für das unternehmen sind unklar",
+    "verdeutlichen die vielfalt",
+    "wirft ernsthafte fragen",
+    "zu einem kritischen zeitpunkt",
+    "reaktionen darauf sind noch abzuwarten",
+    "fuer aufmerksamkeit gesorgt",
+    "für aufmerksamkeit gesorgt",
+    "wirft fragen zur gefaehrlichkeit",
+    "wirft fragen zur gefährlichkeit",
+    "experten diskutieren",
+)
 
 
 def load_dotenv(path: str) -> None:
@@ -400,11 +461,31 @@ def _parse_pub_date(item: FeedItem) -> Optional[datetime]:
     return dt.astimezone()
 
 
-def _is_recent_item(item: FeedItem, max_age_hours: int) -> bool:
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw not in {"0", "false", "no", "nein", "off"}
+
+
+def _is_recent_item(item: FeedItem, max_age_hours: int, require_pub_date: bool = False) -> bool:
     dt = _parse_pub_date(item)
     if dt is None:
-        return True
+        return not require_pub_date
     age = datetime.now().astimezone() - dt
+    if age < timedelta(minutes=-5):
+        return True
     return age <= timedelta(hours=max_age_hours)
 
 
@@ -418,10 +499,17 @@ def _is_noise_item(item: FeedItem) -> bool:
     return False
 
 
-def _filter_items(items: List[FeedItem], max_desc_chars: int = 380) -> List[FeedItem]:
+def _filter_items(
+    items: List[FeedItem],
+    max_desc_chars: int = 380,
+    max_age_hours: Optional[int] = None,
+    require_pub_date: bool = False,
+) -> List[FeedItem]:
     filtered: List[FeedItem] = []
     for item in items:
         if _is_noise_item(item):
+            continue
+        if max_age_hours is not None and not _is_recent_item(item, max_age_hours, require_pub_date=require_pub_date):
             continue
         desc = _clean_text(item.get("description", ""))
         if len(desc) > max_desc_chars:
@@ -446,44 +534,47 @@ def _extract_json_object(raw: str) -> dict:
         return json.loads(text[start : end + 1])
 
 
-def _compose_body_from_sections(section_lines: Dict[str, List[str]]) -> str:
-    def split_sentence_parts(text: str) -> List[str]:
-        return [part.strip() for part in re.split(r"(?<=[.!?])\s+", text.strip()) if part.strip()]
+def _contains_generic_filler(text: str) -> bool:
+    lowered = _clean_text(text).casefold()
+    return any(snippet in lowered for snippet in GENERIC_FILLER_SNIPPETS)
 
-    def ensure_min_sentences(section: str, bullet_text: str, minimum: int = 3) -> str:
+
+def _contains_editorial_fluff(text: str) -> bool:
+    lowered = _clean_text(text).casefold()
+    return any(snippet in lowered for snippet in EDITORIAL_FLUFF_SNIPPETS)
+
+
+def _compose_body_from_sections(section_lines: Dict[str, List[str]]) -> str:
+    def normalize_bullet_text(bullet_text: str) -> str:
         text = _clean_text(bullet_text)
         if text and text[-1] not in ".!?":
             text = text + "."
-        parts = split_sentence_parts(text)
-        fillers_by_section = {
-            "WETTER": [
-                "Regional sind dabei weiterhin Unterschiede moeglich.",
-                "Im Tagesverlauf bleibt die Lage unter Beobachtung.",
-            ],
-            "KURIOSES": [
-                "Das Thema sorgt weiter fuer Aufmerksamkeit.",
-                "Weitere Entwicklungen werden zeitnah erwartet.",
-            ],
-        }
-        default_fillers = [
-            "Die Entwicklung wird weiter beobachtet.",
-            "Weitere Details werden im Tagesverlauf erwartet.",
-        ]
-        fillers = fillers_by_section.get(section, default_fillers)
-        idx = 0
-        while len(parts) < minimum:
-            parts.append(fillers[min(idx, len(fillers) - 1)])
-            idx += 1
-        return " ".join(parts)
+        return text
 
     def fallback_line(section: str) -> str:
         if section == "KURIOSES":
-            return "Heute liegt keine passende kuriose Meldung vor."
+            return (
+                "Heute liegt keine passende kuriose Meldung vor. "
+                "Im verfuegbaren Feed fand sich kein sendefaehiger kurioser Eintrag. "
+                "Die Rubrik bleibt in dieser Ausgabe ohne weitere Geschichte."
+            )
         if section == "WETTER":
-            return "Zum Wetter liegt aktuell keine kompakte Deutschland-Meldung vor."
+            return (
+                "Zum Wetter liegt aktuell keine kompakte Deutschland-Meldung vor. "
+                "Im verfuegbaren Feed fand sich kein passender Wettertext fuer diese Ausgabe. "
+                "Die Rubrik bleibt deshalb ohne zusaetzliche Wettergeschichte."
+            )
         if section == "SPORT":
-            return "Keine weitere passende aktuelle Sportmeldung im Feed gefunden."
-        return "Keine weitere passende aktuelle Meldung im Feed gefunden."
+            return (
+                "Aktuell liegt keine weitere passende Sportmeldung fuer diese Ausgabe vor. "
+                "Im verfuegbaren Feed fand sich kein zusaetzlicher sendefaehiger Sporteintrag. "
+                "Die Rubrik bleibt deshalb in dieser Stunde ohne Zusatzmeldung."
+            )
+        return (
+            "Aktuell liegt keine weitere passende Meldung fuer diese Rubrik vor. "
+            "Im verfuegbaren Feed fand sich kein zusaetzlicher sendefaehiger Eintrag. "
+            "Die Rubrik bleibt deshalb in dieser Stunde ohne Zusatzmeldung."
+        )
 
     lines: List[str] = []
     for section in SECTION_ORDER:
@@ -494,7 +585,7 @@ def _compose_body_from_sections(section_lines: Dict[str, List[str]]) -> str:
             bullets.append(fallback_line(section))
         for bullet in bullets:
             bullet_text = bullet[2:].strip() if bullet.startswith("- ") else bullet
-            bullet_text = ensure_min_sentences(section, bullet_text, minimum=3)
+            bullet_text = normalize_bullet_text(bullet_text)
             lines.append(f"- {bullet_text}")
         lines.append("")
     return "\n".join(lines).strip()
@@ -508,6 +599,10 @@ def _validate_broadcast_body(text: str) -> bool:
     lowered = text.lower()
     banned = ("schreibt uns", "feedback", "podcast", "newsletter", "@")
     if any(term in lowered for term in banned):
+        return False
+    if _contains_generic_filler(text):
+        return False
+    if _contains_editorial_fluff(text):
         return False
     lines = [line.rstrip() for line in text.splitlines()]
     sections_seen = []
@@ -551,8 +646,19 @@ def _redact_items_with_openai(
     prompt = (
         "Formuliere jede Meldung als sinngemaesse Neufassung fuer Nachrichtenradio. "
         "Die Ausgabe soll klar, locker und leicht jugendlich klingen, aber faktisch-serioes bleiben. "
-        "Regeln: mindestens drei Saetze pro Meldung, maximal 700 Zeichen, keine Calls-to-Action, "
+        "Regeln: genau drei kurze Saetze pro Meldung, maximal 700 Zeichen, keine Calls-to-Action, "
         "keine Quellenhinweise, keine Autoren, keine E-Mail-Adressen. "
+        "WETTER muss eine konkrete Wettervorhersage aus der Eingabe sein; kein Regenradar, keine Unwetterkarte, keine Wetterbilder und keine Service-Werbung. "
+        "Satz 1 bringt die Kernmeldung. Satz 2 bringt ein konkretes Detail. Satz 3 bringt ein weiteres konkretes Detail aus der Eingabe. "
+        "Jeder Satz muss eine konkrete Nachrichtenaussage aus der Eingabe transportieren. "
+        "Verboten sind generische Abschlusssaetze wie 'Die Entwicklung wird weiter beobachtet.', "
+        "'Weitere Details werden im Tagesverlauf erwartet.' oder 'Das Thema sorgt weiter fuer Aufmerksamkeit.'. "
+        "Wenn Fakten knapp sind, vorhandene Fakten praeziser aufteilen statt leere Floskeln zu schreiben. "
+        "Nur direkt aus der Eingabe ableitbare Fakten verwenden. "
+        "Keine Bewertung, keine Interpretation und keine Folgenbehauptung; nur in WETTER ist eine Wetterprognose erlaubt und gewuenscht. "
+        "Verboten sind Formulierungen wie 'das zeigt', 'bleibt spannend', 'wird entscheidend sein' oder 'erfordert Aufmerksamkeit'. "
+        "Der dritte Satz muss ein weiteres konkretes Detail aus der Eingabe nennen und darf keine Einordnung sein. "
+        "Wenn nur zwei Fakten klar vorliegen, teile den detailreicheren Fakt in zwei Tatsachensaetze auf statt eine Folgerung zu schreiben. "
         "Bedeutung erhalten, nichts hinzuerfinden. "
         "Keine woertliche Uebernahme kompletter Saetze aus der Eingabe. "
         "Eigennamen, Orte, Zahlen und Zeitangaben duerfen uebernommen werden, Formulierungen muessen neu sein. "
@@ -567,7 +673,10 @@ def _redact_items_with_openai(
                 "role": "developer",
                 "content": (
                     "Du redigierst RSS-Meldungen fuer ein deutsches Nachrichtenradio. "
-                    "Du paraphrasierst konsequent und uebernimmst keine Originalsaetze."
+                    "Du paraphrasierst konsequent und uebernimmst keine Originalsaetze. "
+                    "Jeder Satz muss Nachrichtenwert haben und eine konkrete Aussage tragen. "
+                    "Du schreibst nur direkt belegbare Fakten, keine Einordnung; Wetterprognosen sind nur in WETTER erlaubt. "
+                    "Der dritte Satz liefert ein weiteres Faktendetail statt einer Bewertung."
                 ),
             },
             {"role": "user", "content": prompt},
@@ -593,12 +702,19 @@ def _polish_body_with_openai(api_key: str, model: str, body: str) -> str:
         "1) Behalte exakt diese Ueberschriften und Reihenfolge: TOP-THEMA, DEUTSCHLAND, EUROPA, WELT, SPORT, KURIOSES, WETTER. "
         "2) Unter jeder Ueberschrift nur Aufzaehlungszeilen mit '- '. "
         "3) Anzahl Meldungen exakt: TOP-THEMA 2, DEUTSCHLAND 3, EUROPA 3, WELT 3, SPORT 2, KURIOSES 1, WETTER 1. "
-        "4) Jede Meldung mindestens drei Saetze. "
-        "5) Jede Meldung maximal 700 Zeichen. "
-        "6) Kein Podcast-, Newsletter-, Feedback- oder Quellenstil. "
-        "7) Jede Meldung bleibt eine sinngemaesse Neufassung, keine Originalsaetze aus RSS uebernehmen. "
-        "8) Locker, modern und gut verstaendlich formulieren, ohne unserioesen Slang. "
-        "9) Gesamter Text maximal 9000 Zeichen. "
+        "4) Jede Meldung exakt drei Saetze. "
+        "5) Jeder Satz muss eine konkrete Nachrichtenaussage enthalten. "
+        "6) Jede Meldung maximal 700 Zeichen. "
+        "7) Kein Podcast-, Newsletter-, Feedback- oder Quellenstil. "
+        "8) Die Rubrik WETTER muss eine konkrete Wettervorhersage aus der Eingabe sein; kein Regenradar, keine Unwetterkarte, keine Wetterbilder und keine Service-Werbung. "
+        "9) Keine generischen Abschlusssaetze wie 'Die Entwicklung wird weiter beobachtet.' oder 'Das Thema sorgt weiter fuer Aufmerksamkeit.'. "
+        "10) Keine Bewertung, keine Interpretation und keine Folgenbehauptung; nur in WETTER ist eine Wetterprognose ausdruecklich erlaubt und gewuenscht. "
+        "11) Verboten sind Formulierungen wie 'das zeigt', 'bleibt spannend', 'wird entscheidend sein' oder 'erfordert Aufmerksamkeit'. "
+        "12) Satz 1 ist die Kernmeldung, Satz 2 ein Detail, Satz 3 ein weiteres Detail aus der Quelle. "
+        "13) Der dritte Satz muss ein weiteres konkretes Faktendetail liefern und darf keine Einordnung sein. "
+        "14) Jede Meldung bleibt eine sinngemaesse Neufassung, keine Originalsaetze aus RSS uebernehmen. "
+        "15) Locker, modern und gut verstaendlich formulieren, ohne unserioesen Slang. "
+        "16) Gesamter Text maximal 9000 Zeichen. "
         "Gib nur den finalen Text zurueck, ohne Codeblock.\n\n"
         f"{body}"
     )
@@ -619,7 +735,14 @@ def _repair_body_with_openai(api_key: str, model: str, body: str) -> str:
         "TOP-THEMA, DEUTSCHLAND, EUROPA, WELT, SPORT, KURIOSES, WETTER. "
         "Unter jeder Ueberschrift nur Zeilen mit '- '. "
         "Anzahl Meldungen exakt: TOP-THEMA 2, DEUTSCHLAND 3, EUROPA 3, WELT 3, SPORT 2, KURIOSES 1, WETTER 1. "
-        "Jede Meldung mindestens drei kurze Aussagesaetze, maximal 700 Zeichen. "
+        "Jede Meldung exakt drei kurze Aussagesaetze, maximal 700 Zeichen. "
+        "Jeder Satz muss eine konkrete Nachrichtenaussage enthalten. "
+        "Keine generischen Abschlusssaetze wie 'Die Entwicklung wird weiter beobachtet.' oder 'Das Thema sorgt weiter fuer Aufmerksamkeit.'. "
+        "Keine Bewertung, keine Interpretation und keine Folgenbehauptung; nur in WETTER ist eine Wetterprognose erlaubt und gewuenscht. "
+        "WETTER muss eine konkrete Wettervorhersage enthalten; kein Regenradar, keine Unwetterkarte, keine Wetterbilder und keine Service-Werbung. "
+        "Verboten sind Formulierungen wie 'das zeigt', 'bleibt spannend', 'wird entscheidend sein' oder 'erfordert Aufmerksamkeit'. "
+        "Satz 1 ist die Kernmeldung, Satz 2 ein Detail, Satz 3 ein weiteres Detail aus der Quelle. "
+        "Der dritte Satz muss ein weiteres konkretes Faktendetail liefern und darf keine Einordnung sein. "
         "Keine Werbung, keine Rueckfragen, keine E-Mails, keine Quellen. "
         "Sinngemaess neu formulieren, keine RSS-Originalsaetze uebernehmen. "
         "Maximal 9000 Zeichen.\n\n"
@@ -727,6 +850,40 @@ def _render_weather_item(item: FeedItem, max_chars: int = 240) -> str:
     desc = _strip_byline(_clean_text(item.get("description", "")))
     text = desc or title
     return _shorten(text, max_chars=max_chars)
+
+
+def _weather_haystack(item: FeedItem) -> str:
+    title = _clean_text(item.get("title", ""))
+    desc = _clean_text(item.get("description", ""))
+    link = item.get("link", "")
+    return f"{title} {desc} {link}".casefold()
+
+
+def _is_weather_service_item(item: FeedItem) -> bool:
+    haystack = _weather_haystack(item)
+    return any(keyword in haystack for keyword in WEATHER_SERVICE_KEYWORDS)
+
+
+def _is_germany_weather_forecast_item(item: FeedItem) -> bool:
+    if _is_weather_service_item(item):
+        return False
+    haystack = _weather_haystack(item)
+    link = item.get("link", "").casefold()
+    title = _clean_text(item.get("title", "")).casefold()
+    if "wettervorhersage-deutschland" in link:
+        return True
+    if "/wetter/deutschland/" in link and any(keyword in haystack for keyword in WEATHER_FORECAST_KEYWORDS):
+        return True
+    return title.startswith("wetter deutschland") and any(
+        keyword in haystack for keyword in ("wetterlage", "aussichten", "temperaturen", "grad")
+    )
+
+
+def _is_weather_forecast_item(item: FeedItem) -> bool:
+    if _is_weather_service_item(item):
+        return False
+    haystack = _weather_haystack(item)
+    return any(keyword in haystack for keyword in WEATHER_FORECAST_KEYWORDS)
 
 
 def _select_curious_item(
@@ -874,13 +1031,48 @@ def build_tagesschau_news_package(
     openai_model: str = DEFAULT_OPENAI_MODEL,
     strict_redaction: bool = False,
 ) -> dict:
-    all_items = _filter_items(_safe_fetch_feed("all"))
-    inland_items = _filter_items(_safe_fetch_feed("inland"))
-    europa_items = _filter_items(_safe_fetch_feed("europa"))
-    ausland_items = _filter_items(_safe_fetch_feed("ausland"))
-    wissen_items = _filter_items(_safe_fetch_feed("wissen"))
-    wetter_items = _filter_items(_safe_fetch_feed("wetter"), max_desc_chars=260)
-    sport_feed_items = _filter_items(_safe_fetch_feed("sport"), max_desc_chars=260)
+    news_max_age_hours = _env_int("NEWS_MAX_ITEM_AGE_HOURS", NEWS_MAX_ITEM_AGE_HOURS)
+    sport_max_age_hours = _env_int("NEWS_SPORT_MAX_ITEM_AGE_HOURS", NEWS_SPORT_MAX_ITEM_AGE_HOURS)
+    weather_max_age_hours = _env_int("NEWS_WEATHER_MAX_ITEM_AGE_HOURS", NEWS_WEATHER_MAX_ITEM_AGE_HOURS)
+    require_pub_date = _env_bool("NEWS_REQUIRE_PUBDATE", True)
+
+    all_items = _filter_items(
+        _safe_fetch_feed("all"),
+        max_age_hours=news_max_age_hours,
+        require_pub_date=require_pub_date,
+    )
+    inland_items = _filter_items(
+        _safe_fetch_feed("inland"),
+        max_age_hours=news_max_age_hours,
+        require_pub_date=require_pub_date,
+    )
+    europa_items = _filter_items(
+        _safe_fetch_feed("europa"),
+        max_age_hours=news_max_age_hours,
+        require_pub_date=require_pub_date,
+    )
+    ausland_items = _filter_items(
+        _safe_fetch_feed("ausland"),
+        max_age_hours=news_max_age_hours,
+        require_pub_date=require_pub_date,
+    )
+    wissen_items = _filter_items(
+        _safe_fetch_feed("wissen"),
+        max_age_hours=news_max_age_hours,
+        require_pub_date=require_pub_date,
+    )
+    wetter_items = _filter_items(
+        _safe_fetch_feed("wetter"),
+        max_desc_chars=900,
+        max_age_hours=weather_max_age_hours,
+        require_pub_date=require_pub_date,
+    )
+    sport_feed_items = _filter_items(
+        _safe_fetch_feed("sport"),
+        max_desc_chars=260,
+        max_age_hours=sport_max_age_hours,
+        require_pub_date=require_pub_date,
+    )
 
     if not all_items:
         raise RuntimeError("Tagesschau-Feed konnte nicht geladen werden")
@@ -936,14 +1128,16 @@ def build_tagesschau_news_package(
     curious = _select_curious_item(used_links, all_items, wissen_items)
     section_items["KURIOSES"] = [curious] if curious else []
 
-    wetter_de = _pick_items(
-        wetter_items,
-        1,
-        used_links,
-        predicate=lambda it: "/wetter/deutschland/" in it.get("link", ""),
-    )
+    wetter_de = _pick_items(wetter_items, 1, used_links, predicate=_is_germany_weather_forecast_item)
     if not wetter_de:
-        wetter_de = _pick_items(wetter_items, 1, used_links)
+        wetter_de = _pick_items(wetter_items, 1, used_links, predicate=_is_weather_forecast_item)
+    if not wetter_de:
+        wetter_de = _pick_items(
+            wetter_items,
+            1,
+            used_links,
+            predicate=lambda it: not _is_weather_service_item(it),
+        )
     section_items["WETTER"] = wetter_de
 
     local_section_lines: Dict[str, List[str]] = {}
@@ -1036,6 +1230,12 @@ def build_tagesschau_news_package(
         "body": body,
         "section_lines": final_section_lines,
         "raw_sections": _serialize_sections_for_debug(section_items),
+        "freshness": {
+            "news_max_age_hours": news_max_age_hours,
+            "sport_max_age_hours": sport_max_age_hours,
+            "weather_max_age_hours": weather_max_age_hours,
+            "require_pub_date": require_pub_date,
+        },
         "mode_used": mode_used,
         "char_count": len(text),
     }

@@ -21,6 +21,23 @@ Standardquelle ist `tagesschau` (RSS):
 - Tagesschau-Ressorts: Top-Thema, Deutschland, Europa, Welt, Kurioses, Wetter
 - Sport: Sportschau-RSS (da im Tagesschau-Hauptfeed nicht immer Sportmeldungen enthalten sind)
 
+## Aktualitaet der Einzelmeldungen
+RSS-Eintraege werden vor der Rubriken-Auswahl nach `pubDate` gefiltert. Dadurch kann ein neuer Nachrichtenblock keine mehrtaegigen Einzelmeldungen aus dem Feed-Fallback uebernehmen.
+
+Defaults:
+
+- normale Nachrichten: maximal `30` Stunden alt
+- Sport: maximal `48` Stunden alt
+- Wetter: maximal `36` Stunden alt
+- Eintraege ohne `pubDate` werden standardmaessig verworfen
+
+Optional per ENV:
+
+- `NEWS_MAX_ITEM_AGE_HOURS`
+- `NEWS_SPORT_MAX_ITEM_AGE_HOURS`
+- `NEWS_WEATHER_MAX_ITEM_AGE_HOURS`
+- `NEWS_REQUIRE_PUBDATE` (`1`/`0`, Default `1`)
+
 ## Rubriken-Layout
 Der Nachrichtenkoerper wird mit festen Zielmengen erzeugt:
 
@@ -52,6 +69,26 @@ In `tts_client.py` wird zeilenbasiert segmentiert:
 - Zwischen zwei Sprechbloecken wird zusaetzlich Stille eingefuegt (`TTS_CHUNK_PAUSE_SEC`, Default `0.65`)
 
 Damit entstehen kurze Gedankenpausen zwischen Ueberschriften und Meldungen.
+
+## Lernender Aussprache-Fundus
+
+`news_tts_normalizer.py` prueft jeden neu erstellten Nachrichtentext vor der
+Synthese. Unbekannte Grossbuchstaben-Abkuerzungen werden deterministisch
+buchstabenweise aufgeloest. Schwierige Namen und fremdsprachige Begriffe werden
+abschnittsweise analysiert und nur bei hoher Konfidenz uebernommen.
+
+- dauerhafter Fundus: `thorsten_tts_learned.json`
+- Analyseprotokolle: `output/pronunciation_learning/*.json`
+- Inhalt eines Protokolls: Originaltext, tatsaechlicher TTS-Text, angenommene
+  und abgelehnte Vorschlaege sowie Konflikte
+- vorhandene aktive Aussprachen werden nie still durch einen abweichenden
+  Vorschlag ersetzt
+- bei fehlender API oder einem Analysefehler wird mit dem vorhandenen Fundus
+  weiterproduziert
+
+Manuell gepruefte Eintraege koennen im Fundus mit `origin: user-feedback`
+gekennzeichnet werden. Dadurch bleibt nachvollziehbar, welche Aussprache aus
+einer Hoerkontrolle stammt.
 
 ## Redaktionsmodus
 Bei `source=tagesschau` kann OpenAI fuer die Redaktion genutzt werden:

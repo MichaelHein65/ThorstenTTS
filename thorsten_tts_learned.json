@@ -1,0 +1,61 @@
+{
+  "entries": {
+    "Kalajdzic": {
+      "confidence": 0.95,
+      "first_seen": "2026-06-28T12:10:18+02:00",
+      "kind": "person",
+      "last_seen": "2026-06-28T12:12:21+02:00",
+      "occurrences": 2,
+      "origin": "openai",
+      "reason": "serbischer Name",
+      "status": "active",
+      "tts": "Kalajdzitsch"
+    },
+    "Selenskyj": {
+      "confidence": 0.9,
+      "first_seen": "2026-06-28T12:08:02+02:00",
+      "kind": "person",
+      "last_seen": "2026-06-28T12:08:02+02:00",
+      "occurrences": 1,
+      "origin": "openai",
+      "reason": "ukrainischer Name",
+      "status": "active",
+      "tts": "Selensky"
+    },
+    "Tiny Forests": {
+      "confidence": 1.0,
+      "first_seen": "2026-06-28T12:12:21+02:00",
+      "kind": "concept",
+      "last_seen": "2026-06-28T12:12:21+02:00",
+      "occurrences": 1,
+      "origin": "user-feedback",
+      "reason": "Manuell korrigierte englische Aussprache und Wortgrenze",
+      "status": "active",
+      "tts": "Teini Forrests"
+    },
+    "Vucic": {
+      "confidence": 0.97,
+      "first_seen": "2026-06-28T12:10:18+02:00",
+      "kind": "person",
+      "last_seen": "2026-06-28T12:10:18+02:00",
+      "occurrences": 1,
+      "origin": "openai",
+      "reason": "serbischer Name",
+      "status": "active",
+      "tts": "Wutschitsch"
+    },
+    "WM": {
+      "confidence": 1.0,
+      "first_seen": "2026-06-28T12:08:02+02:00",
+      "kind": "acronym",
+      "last_seen": "2026-06-28T12:08:02+02:00",
+      "occurrences": 3,
+      "origin": "deterministic",
+      "reason": "Unbekannte Grossbuchstaben-Abkuerzung; buchstabenweise sprechen.",
+      "status": "active",
+      "tts": "W M"
+    }
+  },
+  "updated_at": "2026-06-28T12:12:21+02:00",
+  "version": 1
+}
