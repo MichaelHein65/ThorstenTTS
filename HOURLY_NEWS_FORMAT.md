@@ -70,6 +70,26 @@ In `tts_client.py` wird zeilenbasiert segmentiert:
 
 Damit entstehen kurze Gedankenpausen zwischen Ueberschriften und Meldungen.
 
+## Lernender Aussprache-Fundus
+
+`news_tts_normalizer.py` prueft jeden neu erstellten Nachrichtentext vor der
+Synthese. Unbekannte Grossbuchstaben-Abkuerzungen werden deterministisch
+buchstabenweise aufgeloest. Schwierige Namen und fremdsprachige Begriffe werden
+abschnittsweise analysiert und nur bei hoher Konfidenz uebernommen.
+
+- dauerhafter Fundus: `thorsten_tts_learned.json`
+- Analyseprotokolle: `output/pronunciation_learning/*.json`
+- Inhalt eines Protokolls: Originaltext, tatsaechlicher TTS-Text, angenommene
+  und abgelehnte Vorschlaege sowie Konflikte
+- vorhandene aktive Aussprachen werden nie still durch einen abweichenden
+  Vorschlag ersetzt
+- bei fehlender API oder einem Analysefehler wird mit dem vorhandenen Fundus
+  weiterproduziert
+
+Manuell gepruefte Eintraege koennen im Fundus mit `origin: user-feedback`
+gekennzeichnet werden. Dadurch bleibt nachvollziehbar, welche Aussprache aus
+einer Hoerkontrolle stammt.
+
 ## Redaktionsmodus
 Bei `source=tagesschau` kann OpenAI fuer die Redaktion genutzt werden:
 

@@ -3,6 +3,12 @@
 ## Unreleased
 - Filter Tagesschau and Sportschau RSS items by `pubDate` before section selection so stale multi-day items are not reused in new hourly news blocks.
 - Document the news freshness environment variables.
+- Analyze every newly generated news text for difficult names, foreign words, and unknown abbreviations before TTS synthesis.
+- Persist high-confidence pronunciations in `thorsten_tts_learned.json` and reuse them in later news blocks.
+- Save auditable original/TTS text pairs and learning decisions under `output/pronunciation_learning/`.
+- Protect established pronunciations from silent AI overwrites and continue with the existing lexicon if analysis fails.
+- Add reviewed prosody hints for the first production feedback set, including `indigenen`, `Venezuela`, and `Tiny Forests`.
+- Add automated coverage for learning, conflict handling, exact replacements, review filtering, and prosody corrections.
 
 ## 0.5.0 - 2026-03-11
 - Replace the SSHFS-based `Pi5Platte` workflow with local staging under `~/Documents/PiSync`.

@@ -76,6 +76,28 @@ Defaults:
 - `NEWS_WEATHER_MAX_ITEM_AGE_HOURS=36`
 - `NEWS_REQUIRE_PUBDATE=1`
 
+### Lernender Aussprache-Fundus
+
+Vor jeder News-Synthese prueft `news_tts_normalizer.py` den vollstaendigen
+Nachrichtentext auf schwierige Namen, Fremdwoerter und unbekannte Abkuerzungen.
+Hochkonfidente TTS-Schreibweisen werden dauerhaft in
+`thorsten_tts_learned.json` gespeichert und in spaeteren Nachrichten automatisch
+wiederverwendet. Bestehende Eintraege werden bei abweichenden Vorschlaegen nicht
+automatisch ueberschrieben.
+
+Zu jeder Analyse wird unter `output/pronunciation_learning/` ein JSON-Protokoll
+mit Originaltext, tatsaechlichem TTS-Text, neuen Eintraegen, Ablehnungen und
+Konflikten abgelegt. Falls die KI-Pruefung nicht erreichbar ist, laeuft die
+Synthese mit dem vorhandenen Fundus weiter.
+
+Optionale Umgebungsvariablen:
+
+- `NEWS_TTS_AUTO_LEARN=1`
+- `NEWS_TTS_LEARN_MODEL` (Default: `OPENAI_MODEL` oder `gpt-4o-mini`)
+- `NEWS_TTS_LEARN_MIN_CONFIDENCE=0.90`
+- `NEWS_TTS_LEARNED_CATALOG`
+- `NEWS_TTS_LEARNING_AUDIT_DIR`
+
 ## Bedienung
 - Modell auswaehlen
 - bei `Thorsten Emotional` optional eine Emotion setzen

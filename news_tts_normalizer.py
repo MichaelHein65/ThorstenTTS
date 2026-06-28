@@ -2,8 +2,17 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
+
+from news_pronunciation_learner import (
+    DEFAULT_AUDIT_DIR,
+    DEFAULT_LEARNED_CATALOG_PATH,
+    active_replacements,
+    learn_pronunciations,
+    write_learning_audit,
+)
 
 
 DEFAULT_CATALOG_PATH = Path(__file__).with_name("thorsten_tts_catalog.json")
@@ -152,18 +161,57 @@ def _replace_leo_xiv_ordinal(text: str) -> str:
     return re.sub(r"\bLeo XIV\b", "Leo der vierzehnte", text)
 
 
-def normalize_news_tts_text(text: str, catalog_path: Path | None = None) -> str:
+def _replace_exact_term(text: str, source: str, target: str) -> str:
+    pattern = re.compile(rf"(?<!\w){re.escape(source)}(?!\w)")
+    return pattern.sub(lambda _match: target, text)
+
+
+def normalize_news_tts_text(
+    text: str,
+    catalog_path: Path | None = None,
+    learned_catalog_path: Path | None = None,
+) -> str:
+    catalog_file = catalog_path or DEFAULT_CATALOG_PATH
+    learned_file = learned_catalog_path or Path(
+        os.environ.get("NEWS_TTS_LEARNED_CATALOG", str(DEFAULT_LEARNED_CATALOG_PATH))
+    )
+    catalog = _load_catalog(catalog_file)
+    auto_learn = os.environ.get("NEWS_TTS_AUTO_LEARN", "1").strip().lower() in {"1", "true", "yes", "on"}
+    report = {"enabled": False, "reason": "NEWS_TTS_AUTO_LEARN disabled"}
+    if auto_learn:
+        try:
+            threshold = float(os.environ.get("NEWS_TTS_LEARN_MIN_CONFIDENCE", "0.90"))
+        except ValueError:
+            threshold = 0.90
+        report = learn_pronunciations(
+            text,
+            catalog,
+            learned_file,
+            api_key=os.environ.get("OPENAI_API_KEY", "").strip(),
+            model=os.environ.get("NEWS_TTS_LEARN_MODEL", os.environ.get("OPENAI_MODEL", "gpt-4o-mini")),
+            minimum_confidence=max(0.0, min(threshold, 1.0)),
+        )
+
     normalized = text
     normalized = _replace_jahrestag_ordinals(normalized)
     normalized = _replace_dotted_number_ordinals(normalized)
     normalized = _replace_leo_xiv_ordinal(normalized)
 
-    catalog = _load_catalog(catalog_path or DEFAULT_CATALOG_PATH)
+    learned_replacements = active_replacements(learned_file)
+    for source, target in sorted(learned_replacements.items(), key=lambda item: len(item[0]), reverse=True):
+        normalized = _replace_exact_term(normalized, source, target)
 
     for source, target in sorted(catalog["literal_replacements"].items(), key=lambda item: len(item[0]), reverse=True):
         normalized = normalized.replace(source, target)
 
     for source, target in sorted(catalog["acronym_replacements"].items(), key=lambda item: len(item[0]), reverse=True):
         normalized = re.sub(rf"\b{re.escape(source)}\b", target, normalized)
+
+    if auto_learn:
+        audit_dir = Path(os.environ.get("NEWS_TTS_LEARNING_AUDIT_DIR", str(DEFAULT_AUDIT_DIR)))
+        try:
+            write_learning_audit(text, normalized, report, audit_dir)
+        except OSError:
+            pass
 
     return normalized
